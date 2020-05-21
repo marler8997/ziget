@@ -139,15 +139,13 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
             }
             port = @intCast(u16, port32);
         }
-        var pathOffset : u16 = undefined;
+        var pathOffset = @intCast(u16, @ptrToInt(ptr) - @ptrToInt(start));
         var pathLimit : u16 = undefined;
         if (ptr == limit) {
-            pathOffset = @intCast(u16, @ptrToInt(ptr) - @ptrToInt(start));
             pathLimit  = pathOffset;
         } else {
             std.debug.assert(ptr[0] == '/');
             ptr += 1;
-            pathOffset = @intCast(u16, @ptrToInt(ptr) - @ptrToInt(start));
             // TODO: this won't be correct if there is a query
             pathLimit  = @intCast(u16, @ptrToInt(limit) - @ptrToInt(start));
         }
