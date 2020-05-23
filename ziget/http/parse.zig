@@ -372,6 +372,34 @@ test "HttpParser" {
     }
 }
 
+fn chunkedParse(parser: var, data: []const u8, chunkSize: usize) !usize {
+     var remaning = data;
+     while (true) {
+        const nextLen = std.math.min(chunkSize, remaning.len);
+        const parsed = try parser.parse(remaning[0..nextLen]);
+        remaning = remaning[parsed..];
+        if (remaning.len == 0)
+            return data.len;
+    }
+}
+
+const ChunkSizes = struct {
+    max: usize,
+    current: usize,
+    pub fn init(max: usize) ChunkSizes {
+        return ChunkSizes { .max = max, .current = 0, };
+    }
+    pub fn next(self: *ChunkSizes) ?usize {
+        if (self.current == self.max) return null;
+        self.current += 1;
+        return self.current;
+    }
+};
+pub fn chunkSizes(comptime T: type, len: usize) ChunkSizes {
+    return if (comptime T.options.partialData) ChunkSizes.init(len)
+        else .{ .max = len, .current = len - 1 };
+}
+
 fn testParser(comptime HttpParser: type) !void {
     {var c : u8 = 0; while (c < 0x7f) : (c += 1) {
         if (validTokenChar(c) or c == ' ')
@@ -379,17 +407,27 @@ fn testParser(comptime HttpParser: type) !void {
         {
             var parser = HttpParser.init();
             var buf = [_]u8 {c,' '};
-            testing.expectError(HttpParser.Error.InvalidMethodCharacter, parser.parse(&buf));
+            {var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
+                std.debug.warn("chunk {}\n", .{chunkSize});
+                testing.expectError(HttpParser.Error.InvalidMethodCharacter, chunkedParse(&parser, &buf, chunkSize));
+            }}
         }
         {
             var parser = HttpParser.init();
             var buf = [_]u8 {'G','E','T',c};
-            testing.expectError(HttpParser.Error.InvalidMethodCharacter, parser.parse(&buf));
+            {var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
+                std.debug.warn("chunk {}\n", .{chunkSize});
+                testing.expectError(HttpParser.Error.InvalidMethodCharacter, chunkedParse(&parser, &buf, chunkSize));
+            }}
         }
         if (c != ':' and c != '\r') {
             var parser = HttpParser.init();
             var buf = [_]u8 {'G','E','T',' ','/',' ','H','T','T','P','/','1','.','1','\r','\n',c};
-            testing.expectError(HttpParser.Error.InvalidHeaderNameCharacter, parser.parse(&buf));
+            // TODO: fix this
+            //{var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
+            {{const chunkSize = buf.len;
+                testing.expectError(HttpParser.Error.InvalidHeaderNameCharacter, chunkedParse(&parser, &buf, chunkSize));
+            }}
         }
     }}
     {
