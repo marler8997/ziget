@@ -9,7 +9,11 @@ fn printError(comptime fmt: []const u8, args: var) void {
 }
 
 fn usage() void {
-    std.debug.warn("Usage: ziget <url>\n", .{});
+    std.debug.warn(
+      \\Usage: ziget [-options] <url>
+      \\Options:
+      \\  --max-redirs <num>   maximum number of redirects, default is 50
+      , .{});
 }
 
 pub fn main() anyerror!u8 {
@@ -20,6 +24,7 @@ pub fn main() anyerror!u8 {
     }
     args = args[1..];
 
+    var maxRedirects : u16 = 50;
     {
         var newArgsLength : usize = 0;
         defer args.len = newArgsLength;
@@ -29,6 +34,8 @@ pub fn main() anyerror!u8 {
             if (!std.mem.startsWith(u8, arg, "-")) {
                 args[newArgsLength] = arg;
                 newArgsLength += 1;
+            } else if (std.mem.eql(u8, arg, "--max-redirs")) {
+                @panic("--max-redirs not implemented");
             } else if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
                 usage();
                 return 1;
