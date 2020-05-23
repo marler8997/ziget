@@ -150,6 +150,7 @@ pub const HttpParseErrorPartial = error {
     BadHttpVersion,
     InvalidHeaderNameCharacter,
     HeaderNameTooLong,
+    NoLineFeedAfterCarriageReturn,
 };
 pub const HttpParseErrorComplete = error {
     InvalidMethodCharacter,
@@ -158,6 +159,7 @@ pub const HttpParseErrorComplete = error {
     BadHttpVersion,
     InvalidHeaderNameCharacter,
     HeaderNameTooLong,
+    NoLineFeedAfterCarriageReturn,
     Incomplete,
 };
 
@@ -172,6 +174,7 @@ pub const HttpParserOptions = struct {
     onMethod: fn(data: []const u8) void,
     onUri: fn(data: []const u8) void,
     onHeaderName: fn(data: []const u8) void,
+    onHeaderValue: fn(data: []const u8) void,
     // TODO: fix this
     onPartial: fn(data: []const u8) void,
 };
@@ -187,8 +190,12 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
         method,
         uri,
         versionAndNewline,
+        headerInitial,
         headerName,
+        headerSkipWhitespace,
         headerValue,
+        lastNewline,
+        done,
     };
     state: State,
     stateData: union {
@@ -202,25 +209,27 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
     pub fn init() Self {
         return Self { .state = State.method, .stateData = undefined };
     }
-    //pub fn reset(self: *Self) void {
-    //    self.state = State.method;
-    //    self.offset = 0;
-    //}
 
-    fn parse(self: *Self, data: []const u8) !void {
+    pub fn parse(self: *Self, data: []const u8) !usize {
         var remaining = data;
-        while (remaining.len > 0) {
+        loopBlock: { while (remaining.len > 0) {
             const method = switch (self.state) {
                 .method => parseMethod,
                 .uri => parseUri,
                 .versionAndNewline => parseVersionAndNewline,
+                .headerInitial => parseHeaderInitial,
                 .headerName => parseHeaderName,
-                .headerValue => @panic("headerValue not impl"),
+                .headerSkipWhitespace => parseHeaderWhitespace,
+                .headerValue => parseHeaderValue,
+                .lastNewline => parseLastNewline,
+                .done => break :loopBlock,
             };
+            //std.debug.warn("parsing '{}'\n", .{remaining});
             const parsedLen = try method(self, remaining);
             std.debug.assert(parsedLen > 0);
             remaining = remaining[parsedLen..];
-        }
+        }}
+        return @ptrToInt(remaining.ptr) - @ptrToInt(data.ptr);
     }
     fn parseMethod(self: *Self, data: []const u8) Error!usize {
         for (data) |c, i| {
@@ -265,7 +274,6 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
         }
         return Error.Incomplete;
     }
-
     const HTTP_VERSION_AND_NEWLINE = "HTTP/1.1\r\n";
     fn parseVersionAndNewline(self: *Self, data: []const u8) Error!usize {
         const needed = HTTP_VERSION_AND_NEWLINE.len - self.stateData.offset32;
@@ -278,15 +286,22 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
 
         if (!std.mem.eql(u8, HTTP_VERSION_AND_NEWLINE[self.stateData.offset32..], data[0..needed]))
             return error.BadVersionNewline;
-        self.state = .headerName;
+        self.state = .headerInitial;
         return needed;
     }
-
+    fn parseHeaderInitial(self: *Self, data: []const u8) Error!usize {
+        if (data[0] == '\r') {
+            self.state = .lastNewline;
+            return @as(usize, 1);
+        }
+        self.state = .headerName;
+        return self.parseHeaderName(data); // need to call directly because we haven't consumed any data
+    }
     fn parseHeaderName(self: *Self, data: []const u8) Error!usize {
         for (data) |c, i| {
             if (c == ':') {
                 options.onHeaderName(data[0..i]);
-                self.state = .headerValue;
+                self.state = .headerSkipWhitespace;
                 return i + 1;
             }
             if (!validTokenChar(c))
@@ -302,6 +317,39 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
         }
         return Error.Incomplete;
     }
+    fn parseHeaderWhitespace(self: *Self, data: []const u8) Error!usize {
+        for (data) |c, i| {
+            if (c != ' ' and c != '\t') {
+                // self.headerValueState = noNewline???
+                self.state = .headerValue;
+                return i;
+            }
+            // TODO: limit the amount of whitespace?? Prevent DOS
+        }
+        return data.len;
+    }
+    fn parseHeaderValue(self: *Self, data: []const u8) Error!usize {
+        {var i : usize= 0; while (i + 1 < data.len) : (i += 1) {
+            if ('\r' == data[i] and '\n' == data[i+1]) {
+                options.onHeaderValue(data[0..i]);
+                self.state = .headerInitial;
+                return i + 2;
+            }
+            // TODO: limit the length
+        }}
+        if (comptime options.partialData) {
+            //options.onHeaderValuePartial(self.state, data);
+            options.onPartial(data);
+            return data.len;
+        }
+        return Error.Incomplete;
+    }
+    fn parseLastNewline(self: *Self, data: []const u8) Error!usize {
+        if (data[0] != '\n')
+            return error.NoLineFeedAfterCarriageReturn;
+        self.state = .done;
+        return 1;
+    }
 };}
 
 
@@ -311,19 +359,20 @@ fn testOnAnything(data: []const u8) void {
 }
 test "HttpParser" {
     inline for ([2]bool {false, true}) |partialData| {
-        testParser(HttpParserGeneric(HttpParserOptions {
+        try testParser(HttpParserGeneric(HttpParserOptions {
             .partialData = partialData,
             .maxMethod = 30,
             .maxHeaderName = 40,
             .onMethod = testOnAnything,
             .onUri = testOnAnything,
             .onHeaderName = testOnAnything,
+            .onHeaderValue = testOnAnything,
             .onPartial = testOnAnything,
         }));
     }
 }
 
-fn testParser(comptime HttpParser: type) void {
+fn testParser(comptime HttpParser: type) !void {
     {var c : u8 = 0; while (c < 0x7f) : (c += 1) {
         if (validTokenChar(c) or c == ' ')
             continue;
@@ -337,7 +386,7 @@ fn testParser(comptime HttpParser: type) void {
             var buf = [_]u8 {'G','E','T',c};
             testing.expectError(HttpParser.Error.InvalidMethodCharacter, parser.parse(&buf));
         }
-        if (c != ':') {
+        if (c != ':' and c != '\r') {
             var parser = HttpParser.init();
             var buf = [_]u8 {'G','E','T',' ','/',' ','H','T','T','P','/','1','.','1','\r','\n',c};
             testing.expectError(HttpParser.Error.InvalidHeaderNameCharacter, parser.parse(&buf));
@@ -357,4 +406,7 @@ fn testParser(comptime HttpParser: type) void {
         var parser = HttpParser.init();
         testing.expectError(HttpParser.Error.BadVersionNewline, parser.parse(buf));
     }
+    _ = try HttpParser.init().parse("GET / HTTP/1.1\r\n\r\n");
+    _ = try HttpParser.init().parse("GET / HTTP/1.1\r\nName: Value\r\n\r\n");
+    _ = try HttpParser.init().parse("GET / HTTP/1.1\r\nName: Value\r\nAnother: value\r\n\r\n");
 }
