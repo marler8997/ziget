@@ -143,7 +143,6 @@ fn validTokenChar(c: u8) bool {
     return 0 == (getCharacterFlags(c) & CharacterFlags.ctl_separator);
 }
 
-
 pub const HttpParseErrorPartial = error {
     InvalidMethodCharacter,
     MethodNameTooLong,
@@ -168,9 +167,11 @@ const HeaderValueStave = enum {
 
 pub const HttpParserOptions = struct {
     partialData: bool,
-    maxMethodLen: comptime_int,
+    maxMethod: comptime_int,
+    maxHeaderName: comptime_int,
     onMethod: fn(data: []const u8) void,
     onUri: fn(data: []const u8) void,
+    onHeaderName: fn(data: []const u8) void,
     // TODO: fix this
     onPartial: fn(data: []const u8) void,
 };
@@ -187,6 +188,7 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
         uri,
         versionAndNewline,
         headerName,
+        headerValue,
     };
     state: State,
     stateData: union {
@@ -212,7 +214,8 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
                 .method => parseMethod,
                 .uri => parseUri,
                 .versionAndNewline => parseVersionAndNewline,
-                .headerName => @panic("headerName not impl"),
+                .headerName => parseHeaderName,
+                .headerValue => @panic("headerValue not impl"),
             };
             const parsedLen = try method(self, remaining);
             std.debug.assert(parsedLen > 0);
@@ -228,7 +231,8 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
             }
             if (!validTokenChar(c))
                 return Error.InvalidMethodCharacter;
-            if (i >= options.maxMethodLen)
+            // TODO: i is NOT all the data if partial is supported
+            if (i >= options.maxMethod)
                 return Error.MethodNameTooLong;
         }
         if (comptime options.partialData) {
@@ -266,7 +270,7 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
     fn parseVersionAndNewline(self: *Self, data: []const u8) Error!usize {
         const needed = HTTP_VERSION_AND_NEWLINE.len - self.stateData.offset32;
         if (data.len < needed) {
-            if (!std.mem.eql(u8, HTTP_VERSION_AND_NEWLINE[self.stateData.offset32..], data[0..needed]))
+            if (!std.mem.eql(u8, HTTP_VERSION_AND_NEWLINE[self.stateData.offset32..], data[0..]))
                 return error.BadVersionNewline;
             self.stateData.offset32 += @intCast(u32, data.len);
             return data.len;
@@ -276,6 +280,27 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
             return error.BadVersionNewline;
         self.state = .headerName;
         return needed;
+    }
+
+    fn parseHeaderName(self: *Self, data: []const u8) Error!usize {
+        for (data) |c, i| {
+            if (c == ':') {
+                options.onHeaderName(data[0..i]);
+                self.state = .headerValue;
+                return i + 1;
+            }
+            if (!validTokenChar(c))
+                return Error.InvalidHeaderNameCharacter;
+            // TODO: i is NOT all the data if partial is supported
+            if (i >= options.maxHeaderName)
+                return Error.HeaderNameTooLong;
+        }
+        if (comptime options.partialData) {
+            //options.onHeaderNamePartial(self.state, data);
+            options.onPartial(data);
+            return data.len;
+        }
+        return Error.Incomplete;
     }
 };}
 
@@ -288,9 +313,11 @@ test "HttpParser" {
     inline for ([2]bool {false, true}) |partialData| {
         testParser(HttpParserGeneric(HttpParserOptions {
             .partialData = partialData,
-            .maxMethodLen = 30,
+            .maxMethod = 30,
+            .maxHeaderName = 40,
             .onMethod = testOnAnything,
             .onUri = testOnAnything,
+            .onHeaderName = testOnAnything,
             .onPartial = testOnAnything,
         }));
     }
@@ -302,18 +329,23 @@ fn testParser(comptime HttpParser: type) void {
             continue;
         {
             var parser = HttpParser.init();
-            var buf = [_]u8 {c, ' '};
+            var buf = [_]u8 {c,' '};
             testing.expectError(HttpParser.Error.InvalidMethodCharacter, parser.parse(&buf));
         }
         {
             var parser = HttpParser.init();
-            var buf = [_]u8 {'G','E','T',c, ' '};
+            var buf = [_]u8 {'G','E','T',c};
             testing.expectError(HttpParser.Error.InvalidMethodCharacter, parser.parse(&buf));
+        }
+        if (c != ':') {
+            var parser = HttpParser.init();
+            var buf = [_]u8 {'G','E','T',' ','/',' ','H','T','T','P','/','1','.','1','\r','\n',c};
+            testing.expectError(HttpParser.Error.InvalidHeaderNameCharacter, parser.parse(&buf));
         }
     }}
     {
         var parser = HttpParser.init();
-        var buf: [HttpParser.options.maxMethodLen + 1]u8 = undefined;
+        var buf: [HttpParser.options.maxMethod + 1]u8 = undefined;
         std.mem.set(u8, &buf, 'A');
         testing.expectError(HttpParser.Error.MethodNameTooLong, parser.parse(&buf));
     }
