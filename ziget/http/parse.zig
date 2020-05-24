@@ -278,8 +278,9 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
     fn parseVersionAndNewline(self: *Self, data: []const u8) Error!usize {
         const needed = HTTP_VERSION_AND_NEWLINE.len - self.stateData.offset32;
         if (data.len < needed) {
-            if (!std.mem.eql(u8, HTTP_VERSION_AND_NEWLINE[self.stateData.offset32..], data[0..]))
+            if (!memcmp(u8, HTTP_VERSION_AND_NEWLINE[self.stateData.offset32..].ptr, data.ptr, data.len)) {
                 return error.BadVersionNewline;
+            }
             self.stateData.offset32 += @intCast(u32, data.len);
             return data.len;
         }
@@ -352,6 +353,13 @@ pub fn HttpParserGeneric(comptime options_: HttpParserOptions) type { return str
     }
 };}
 
+fn memcmp(comptime T: type, a: [*]const T, b: [*]const T, len: usize) bool {
+    var i : usize = 0;
+    while (i < len) : (i += 1) {
+        if (a[i] != b[i]) return false;
+    }
+    return true;
+}
 
 
 fn testOnAnything(data: []const u8) void {
@@ -408,7 +416,6 @@ fn testParser(comptime HttpParser: type) !void {
             var parser = HttpParser.init();
             var buf = [_]u8 {c,' '};
             {var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
-                std.debug.warn("chunk {}\n", .{chunkSize});
                 testing.expectError(HttpParser.Error.InvalidMethodCharacter, chunkedParse(&parser, &buf, chunkSize));
             }}
         }
@@ -416,16 +423,13 @@ fn testParser(comptime HttpParser: type) !void {
             var parser = HttpParser.init();
             var buf = [_]u8 {'G','E','T',c};
             {var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
-                std.debug.warn("chunk {}\n", .{chunkSize});
                 testing.expectError(HttpParser.Error.InvalidMethodCharacter, chunkedParse(&parser, &buf, chunkSize));
             }}
         }
         if (c != ':' and c != '\r') {
             var parser = HttpParser.init();
             var buf = [_]u8 {'G','E','T',' ','/',' ','H','T','T','P','/','1','.','1','\r','\n',c};
-            // TODO: fix this
-            //{var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
-            {{const chunkSize = buf.len;
+            {var i = chunkSizes(HttpParser, buf.len); while (i.next()) |chunkSize| {
                 testing.expectError(HttpParser.Error.InvalidHeaderNameCharacter, chunkedParse(&parser, &buf, chunkSize));
             }}
         }
