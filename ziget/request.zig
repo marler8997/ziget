@@ -49,8 +49,9 @@ pub fn sendHttpGet(allocator: *Allocator, file: std.fs.File, httpUrl: Url.Http, 
     );
     defer allocator.free(request);
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("{}", .{request});
+    std.debug.warn("Sending HTTP Request...\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    std.debug.warn("{}", .{request});
     try file.writeAll(request);
 }
 
@@ -93,10 +94,10 @@ pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
     try sendHttpGet(options.allocator, file, httpUrl, false);
     const buffer = options.buffer;
     const response = try readHttpResponse(buffer, file);
-    std.debug.warn("HTTP Response:\n", .{});
+    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    std.debug.warn("Received Http Response:\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     std.debug.warn("{}", .{buffer[0..response.headerLimit]});
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     const httpResponse = buffer[0..response.headerLimit];
     {
         const status = try http.parse.parseHttpStatusLine(httpResponse);
