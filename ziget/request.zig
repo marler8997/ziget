@@ -29,7 +29,6 @@ pub fn download(options: *DownloadOptions, url: Url) !void {
         .None => @panic("no scheme not implemented"),
         .Unknown => return error.UnknownUrlScheme,
         .Http => |httpUrl| return downloadHttp(options, httpUrl),
-        .Https => |httpsUrl| @panic("https not impl"),
     }
 }
 
@@ -90,6 +89,11 @@ pub fn forward(buffer: []u8, inFile: std.fs.File, outFile: std.fs.File) !void {
 pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.port orelse 80);
     defer file.close();
+
+    if (httpUrl.secure) {
+        std.debug.warn("Error: https not implemented (url={})\n", .{httpUrl.str});
+        return error.HttpsNotImplemented;
+    }
 
     try sendHttpGet(options.allocator, file, httpUrl, false);
     const buffer = options.buffer;

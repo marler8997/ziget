@@ -15,10 +15,10 @@ pub const Url = union(enum) {
         str: [*]const u8,
     },
     Http: Http,
-    Https: void, // not impl
 
     pub const Http = struct {
         str: []const u8,
+        secure: bool,
         hostOffset: u8,
         hostLimit: u16,
         port: ?u16,
@@ -50,8 +50,7 @@ pub const Url = union(enum) {
         return switch (self) {
             .None => |u| "",
             .Unknown => |u| u.str[0..ptrIndexOf(u8, u.str, ':')],
-            .Http => |u| "http",
-            .Https => |u| "https",
+            .Http => |u| if (u.secure) "https" else "http",
         };
     }
 };
@@ -96,7 +95,9 @@ fn matchSkip(ptrRef: *[*]const u8, limit: [*]const u8, needle: []const u8) bool 
 // a temporary implementation
 pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
     var ptr = start;
-    if (matchSkip(&ptr, limit, "http://")) {
+
+    const isHttps = matchSkip(&ptr, limit, "https://");
+    if (isHttps or matchSkip(&ptr, limit, "http://")) {
         if (ptr == limit) return error.UrlHttpMissingHost;
         var hostStart = ptr;
         var hostLimit : [*]const u8 = undefined;
@@ -151,6 +152,7 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
         }
         return Url { .Http = .{
             .str = start[0..@ptrToInt(limit) - @ptrToInt(start)],
+            .secure = isHttps,
             .hostOffset  = @intCast(u8 , @ptrToInt(hostStart) - @ptrToInt(start)),
             .hostLimit   = @intCast(u16, @ptrToInt(hostLimit) - @ptrToInt(start)),
             .port        = port,
