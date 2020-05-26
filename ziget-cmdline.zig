@@ -52,7 +52,18 @@ pub fn main() anyerror!u8 {
     }
     const urlString = args[0];
     const url = try ziget.url.parseUrl(urlString);
-    ziget.request.download(allocator, url) catch |e| switch (e) {
+    const buffer = try allocator.alloc(u8, 8192);
+    defer allocator.free(buffer);
+    var options = ziget.request.DownloadOptions {
+        .flags =
+              ziget.request.DownloadOptions.Flag.bufferIsMaxHttpRequest
+            | ziget.request.DownloadOptions.Flag.bufferIsMaxHttpResponse,
+        .allocator = allocator,
+        .maxRedirects = maxRedirects,
+        .buffer = buffer,
+        .redirects = 0,
+    };
+    ziget.request.download(&options, url) catch |e| switch (e) {
         error.UnknownUrlScheme => {
             printError("unknown url scheme '{}'", .{url.schemeString()});
             return 1;

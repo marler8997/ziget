@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const net = std.net;
+const testing = std.testing;
 
 const Allocator = mem.Allocator;
 
@@ -9,12 +10,25 @@ const UrlScheme = urlmod.UrlScheme;
 const Url = urlmod.Url;
 
 const ziget = @import("../ziget.zig");
+const http = ziget.http;
 
-pub fn download(allocator: *Allocator, url: Url) !void {
+pub const DownloadOptions = struct {
+    pub const Flag = struct {
+        pub const bufferIsMaxHttpRequest  : u8 = 0x01;
+        pub const bufferIsMaxHttpResponse : u8 = 0x02;
+    };
+    flags: u8,
+    allocator: *Allocator,
+    maxRedirects: u32,
+    buffer: []u8,
+    redirects: u32,
+};
+
+pub fn download(options: *DownloadOptions, url: Url) !void {
     switch (url) {
         .None => @panic("no scheme not implemented"),
         .Unknown => return error.UnknownUrlScheme,
-        .Http => |httpUrl| return downloadHttp(allocator, httpUrl),
+        .Http => |httpUrl| return downloadHttp(options, httpUrl),
         .Https => |httpsUrl| @panic("https not impl"),
     }
 }
@@ -72,21 +86,39 @@ pub fn forward(buffer: []u8, inFile: std.fs.File, outFile: std.fs.File) !void {
     }
 }
 
-pub fn downloadHttp(allocator: *Allocator, httpUrl: Url.Http) !void {
-    const file = try net.tcpConnectToHost(allocator, httpUrl.getHostString(), httpUrl.port orelse 80);
+pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
+    const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.port orelse 80);
     defer file.close();
 
-    try sendHttpGet(allocator, file, httpUrl, false);
-    var buffer = try allocator.alloc(u8, 4096); // max 4K HTTP response header for now?
-    defer allocator.free(buffer);
+    try sendHttpGet(options.allocator, file, httpUrl, false);
+    const buffer = options.buffer;
     const response = try readHttpResponse(buffer, file);
     std.debug.warn("HTTP Response:\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     std.debug.warn("{}", .{buffer[0..response.headerLimit]});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    const httpResponse = buffer[0..response.headerLimit];
+    {
+        const status = try http.parse.parseHttpStatusLine(httpResponse);
+        if (status.code != 200) {
+            const headers = buffer[status.len..];
+            if (status.code == 301) {
+                options.redirects += 1;
+                if (options.redirects > options.maxRedirects)
+                    return error.MaxRedirects;
+                const location = (try http.parse.parseHeaderValue(headers, "Location")) orelse
+                    return error.HttpRedirectNoLocation;
+                //try download(options, try ziget.url.parseUrl(location));
+                download(options, try ziget.url.parseUrl(location)) catch unreachable;
+                return;
+            }
+            std.debug.warn("Non 200 status code: {} {}\n", .{status.code, status.getMsg(httpResponse)});
+            return error.HttpNon200StatusCode;
+        }
+    }
+
     if (response.dataLimit > response.headerLimit) {
         try std.io.getStdOut().writeAll(buffer[response.headerLimit..response.dataLimit]);
     }
     try forward(buffer, file, std.io.getStdOut());
 }
-
