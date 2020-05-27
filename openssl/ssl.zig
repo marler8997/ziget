@@ -1,5 +1,13 @@
 const std = @import("std");
 
+// TODO: why isn't this working?
+//const stdext = @import("stdext");
+const stdext= @import("../src-stdext/stdext.zig");
+const readwrite = stdext.readwrite;
+const Reader = readwrite.Reader;
+const Writer = readwrite.Writer;
+const ReaderWriter = readwrite.ReaderWriter;
+
 const openssl = @cImport({
     @cInclude("openssl/ssl.h");
     @cInclude("openssl/err.h");
@@ -37,6 +45,7 @@ pub fn init() anyerror!void {
 }
 
 pub const SslConn = struct {
+    rw: ReaderWriter,
     ctx: *openssl.SSL_CTX,
 
     pub fn init(file: std.fs.File, serverName: []const u8) !SslConn {
@@ -91,9 +100,27 @@ pub const SslConn = struct {
             }
         }
 
-        return SslConn { .ctx = ctx };
+        return SslConn {
+            .rw = .{
+                .reader = .{ .readFn = read },
+                .writer = .{ .writeFn = write },
+            },
+            .ctx = ctx
+        };
     }
     pub fn deinit(self: SslConn) void {
         openssl.SSL_CTX_free(self.ctx);
+    }
+    pub fn read(reader: *Reader, data: []u8) anyerror!usize {
+        const self = @fieldParentPtr(SslConn, "rw",
+            @fieldParentPtr(ReaderWriter, "reader", reader));
+        return error.SslReadNotImplemented;
+        //return try self.file.read(data);
+    }
+    pub fn write(writer: *Writer, data: []const u8) anyerror!void {
+        const self = @fieldParentPtr(SslConn, "rw",
+            @fieldParentPtr(ReaderWriter, "writer", writer));
+        return error.SslWriteNotImplemented;
+        //try self.file.writeAll(data);
     }
 };

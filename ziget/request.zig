@@ -5,17 +5,18 @@ const testing = std.testing;
 
 const Allocator = mem.Allocator;
 
+const stdext = @import("stdext");
+const readwrite = stdext.readwrite;
+const Reader = readwrite.Reader;
+const Writer = readwrite.Writer;
+const FileReaderWriter = readwrite.FileReaderWriter;
+
 const urlmod = @import("./url.zig");
 const UrlScheme = urlmod.UrlScheme;
 const Url = urlmod.Url;
 
 const ziget = @import("../ziget.zig");
 const http = ziget.http;
-
-const readwrite = ziget.readwrite;
-const Reader = readwrite.Reader;
-const Writer = readwrite.Writer;
-const FileReaderWriter = readwrite.FileReaderWriter;
 
 const ssl = @import("ssl");
 
@@ -135,11 +136,9 @@ pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !Dow
     var sslConn : ssl.SslConn = undefined;
     if (httpUrl.secure) {
         sslConn = try ssl.SslConn.init(file, httpUrl.getHostString());
-        return error.NotImplemented;
+        rw = &sslConn.rw;
     }
     defer { if (httpUrl.secure) sslConn.deinit(); }
-
-
 
     try sendHttpGet(options.allocator, &rw.writer, httpUrl, false);
     const buffer = options.buffer;
