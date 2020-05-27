@@ -68,6 +68,7 @@ pub fn main() anyerror!u8 {
             printError("unknown url scheme '{}'", .{url.schemeString()});
             return 1;
         },
+        error.HttpsNotImplemented => return 1, // error already printed
         else => return e,
     };
     return 0;

@@ -12,6 +12,11 @@ const Url = urlmod.Url;
 const ziget = @import("../ziget.zig");
 const http = ziget.http;
 
+const DownloadResult = union(enum) {
+    Success: void,
+    Redirect: Url,
+};
+
 pub const DownloadOptions = struct {
     pub const Flag = struct {
         pub const bufferIsMaxHttpRequest  : u8 = 0x01;
@@ -24,13 +29,38 @@ pub const DownloadOptions = struct {
     redirects: u32,
 };
 
+// have to use anyerror for now because download and downloadHttp recursively call each other
 pub fn download(options: *DownloadOptions, url: Url) !void {
-    switch (url) {
-        .None => @panic("no scheme not implemented"),
-        .Unknown => return error.UnknownUrlScheme,
-        .Http => |httpUrl| return downloadHttp(options, httpUrl),
+    var nextUrl = url;
+    while (true) {
+        const result = switch (nextUrl) {
+            .None => @panic("no scheme not implemented"),
+            .Unknown => return error.UnknownUrlScheme,
+            .Http => |httpUrl| try downloadHttpOrRedirect(options, httpUrl),
+        };
+        switch (result) {
+            .Success => return,
+            .Redirect => |redirectUrl| {
+                options.redirects += 1;
+                if (options.redirects > options.maxRedirects)
+                    return error.MaxRedirects;
+                nextUrl = redirectUrl;
+            },
+        }
     }
 }
+// TODO: should I provide this function?
+//pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
+//    switch (try downloadHttpOrRedirect(options, httpUrl)) {
+//        .Success => return,
+//        .Redirect => |redirectUrl| {
+//            options.redirects += 1;
+//            if (options.redirect > options.maxRedirects)
+//                return error.MaxRedirects;
+//            return download(options, redirectUrl);
+//        },
+//    }
+//}
 
 pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8, host: []const u8,headers: []const u8) ![]const u8 {
     return try std.fmt.allocPrint(allocator,
@@ -86,7 +116,7 @@ pub fn forward(buffer: []u8, inFile: std.fs.File, outFile: std.fs.File) !void {
     }
 }
 
-pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
+pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.port orelse 80);
     defer file.close();
 
@@ -108,14 +138,10 @@ pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
         if (status.code != 200) {
             const headers = buffer[status.len..];
             if (status.code == 301) {
-                options.redirects += 1;
-                if (options.redirects > options.maxRedirects)
-                    return error.MaxRedirects;
+                // TODO: create copy of location url
                 const location = (try http.parse.parseHeaderValue(headers, "Location")) orelse
                     return error.HttpRedirectNoLocation;
-                //try download(options, try ziget.url.parseUrl(location));
-                download(options, try ziget.url.parseUrl(location)) catch unreachable;
-                return;
+                return DownloadResult { .Redirect = try ziget.url.parseUrl(location) };
             }
             std.debug.warn("Non 200 status code: {} {}\n", .{status.code, status.getMsg(httpResponse)});
             return error.HttpNon200StatusCode;
@@ -126,4 +152,5 @@ pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
         try std.io.getStdOut().writeAll(buffer[response.headerLimit..response.dataLimit]);
     }
     try forward(buffer, file, std.io.getStdOut());
+    return DownloadResult.Success;
 }
