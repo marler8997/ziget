@@ -26,6 +26,7 @@ pub fn build(b: *Builder) !void {
     exe.setBuildMode(mode);
     if (openssl) {
         exe.addPackage(Pkg { .name = "ssl", .path = "openssl/ssl.zig" });
+        exe.linkSystemLibrary("c");
         exe.linkSystemLibrary("ssl");
         exe.linkSystemLibrary("crypto");
     } else {

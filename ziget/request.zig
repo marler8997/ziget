@@ -12,6 +12,8 @@ const Url = urlmod.Url;
 const ziget = @import("../ziget.zig");
 const http = ziget.http;
 
+const ssl = @import("ssl");
+
 const DownloadResult = union(enum) {
     Success: void,
     Redirect: Url,
@@ -120,10 +122,12 @@ pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !Dow
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.port orelse 80);
     defer file.close();
 
+    var sslConn : ssl.SslConn = undefined;
+
     if (httpUrl.secure) {
-        std.debug.warn("Error: https not implemented (url={})\n", .{httpUrl.str});
-        return error.HttpsNotImplemented;
+        sslConn = try ssl.SslConn.init(file);
     }
+    defer { if (httpUrl.secure) sslConn.deinit(); }
 
     try sendHttpGet(options.allocator, file, httpUrl, false);
     const buffer = options.buffer;
