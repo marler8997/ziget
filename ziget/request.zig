@@ -119,7 +119,7 @@ pub fn forward(buffer: []u8, inFile: std.fs.File, outFile: std.fs.File) !void {
 }
 
 pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !DownloadResult {
-    const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.port orelse 80);
+    const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer file.close();
 
     var sslConn : ssl.SslConn = undefined;

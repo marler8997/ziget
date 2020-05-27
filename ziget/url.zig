@@ -21,7 +21,7 @@ pub const Url = union(enum) {
         secure: bool,
         hostOffset: u8,
         hostLimit: u16,
-        port: ?u16,
+        optionalPort: ?u16,
         pathOffset: u16,
         pathLimit: u16,
         queryOffset: u16,
@@ -34,6 +34,10 @@ pub const Url = union(enum) {
         pub fn getPathString(self: @This()) []const u8 {
             if (self.pathOffset == 0) return "";
             return self.str[self.pathOffset..self.pathLimit];
+        }
+        pub fn getPortOrDefault(self: @This()) u16 {
+            if (self.optionalPort) |port| return port;
+            return if (self.secure) 443 else 80;
         }
     };
 
@@ -101,7 +105,7 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
         if (ptr == limit) return error.UrlHttpMissingHost;
         var hostStart = ptr;
         var hostLimit : [*]const u8 = undefined;
-        var port : ?u16 = null;
+        var optionalPort : ?u16 = null;
         parsePort: {
             parseHost: {
                 while (true) {
@@ -138,7 +142,7 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
                 port32 += ptr[0] - '0';
                 if (port32 >= 65535) return error.UrlPortTooHigh;
             }
-            port = @intCast(u16, port32);
+            optionalPort = @intCast(u16, port32);
         }
         var pathOffset = @intCast(u16, @ptrToInt(ptr) - @ptrToInt(start));
         var pathLimit : u16 = undefined;
@@ -155,7 +159,7 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
             .secure = isHttps,
             .hostOffset  = @intCast(u8 , @ptrToInt(hostStart) - @ptrToInt(start)),
             .hostLimit   = @intCast(u16, @ptrToInt(hostLimit) - @ptrToInt(start)),
-            .port        = port,
+            .optionalPort = optionalPort,
             .pathOffset  = pathOffset,
             .pathLimit   = pathLimit,
             .queryOffset = 0,
