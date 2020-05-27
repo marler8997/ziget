@@ -12,6 +12,11 @@ const Url = urlmod.Url;
 const ziget = @import("../ziget.zig");
 const http = ziget.http;
 
+const readwrite = ziget.readwrite;
+const Reader = readwrite.Reader;
+const Writer = readwrite.Writer;
+const FileReaderWriter = readwrite.FileReaderWriter;
+
 const ssl = @import("ssl");
 
 const DownloadResult = union(enum) {
@@ -73,7 +78,7 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
         method, resource, host, headers});
 }
 
-pub fn sendHttpGet(allocator: *Allocator, file: std.fs.File, httpUrl: Url.Http, keepAlive: bool) !void {
+pub fn sendHttpGet(allocator: *Allocator, writer: *Writer, httpUrl: Url.Http, keepAlive: bool) !void {
     const request = try httpAlloc(allocator, "GET", httpUrl.str,
         httpUrl.getHostPortString(),
         if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n"
@@ -83,19 +88,19 @@ pub fn sendHttpGet(allocator: *Allocator, file: std.fs.File, httpUrl: Url.Http, 
     std.debug.warn("Sending HTTP Request...\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     std.debug.warn("{}", .{request});
-    try file.writeAll(request);
+    try writer.write(request);
 }
 
 const HttpResponseData = struct {
     headerLimit: usize,
     dataLimit: usize,
 };
-pub fn readHttpResponse(buffer: []u8, inFile: std.fs.File) !HttpResponseData {
+pub fn readHttpResponse(buffer: []u8, reader: *Reader) !HttpResponseData {
     var totalRead : usize = 0;
     while (true) {
         if (totalRead >= buffer.len)
             return error.HttpResponseHeaderTooBig;
-        var len = try inFile.read(buffer[totalRead..]);
+        var len = try reader.read(buffer[totalRead..]);
         if (len == 0) return error.HttpResponseIncomplete;
         var headerLimit = totalRead;
         totalRead = totalRead + len;
@@ -110,28 +115,35 @@ pub fn readHttpResponse(buffer: []u8, inFile: std.fs.File) !HttpResponseData {
 }
 
 // TODO: call sendFile on linux so we don't have to read the data into memory
-pub fn forward(buffer: []u8, inFile: std.fs.File, outFile: std.fs.File) !void {
+pub fn forward(buffer: []u8, reader: *Reader, writer: *Writer) !void {
     while (true) {
-        var len = try inFile.read(buffer);
+        var len = try reader.read(buffer);
         if (len == 0) break;
-        try outFile.writeAll(buffer[0..len]);
+        try writer.write(buffer[0..len]);
     }
 }
 
 pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
-    defer file.close();
+    defer {
+        // TODO: file.shutdown()???
+        file.close();
+    }
+    var fileRw = FileReaderWriter.init(file);
+    var rw = &fileRw.rw;
 
     var sslConn : ssl.SslConn = undefined;
-
     if (httpUrl.secure) {
-        sslConn = try ssl.SslConn.init(file);
+        sslConn = try ssl.SslConn.init(file, httpUrl.getHostString());
+        return error.NotImplemented;
     }
     defer { if (httpUrl.secure) sslConn.deinit(); }
 
-    try sendHttpGet(options.allocator, file, httpUrl, false);
+
+
+    try sendHttpGet(options.allocator, &rw.writer, httpUrl, false);
     const buffer = options.buffer;
-    const response = try readHttpResponse(buffer, file);
+    const response = try readHttpResponse(buffer, &rw.reader);
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     std.debug.warn("Received Http Response:\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
@@ -155,6 +167,6 @@ pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !Dow
     if (response.dataLimit > response.headerLimit) {
         try std.io.getStdOut().writeAll(buffer[response.headerLimit..response.dataLimit]);
     }
-    try forward(buffer, file, std.io.getStdOut());
+    try forward(buffer, &rw.reader, &readwrite.stdoutWriter);
     return DownloadResult.Success;
 }
