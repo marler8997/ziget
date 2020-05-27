@@ -1,5 +1,6 @@
 const std = @import("std");
 const ziget = @import("./ziget.zig");
+const ssl = @import("ssl");
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = &arena.allocator;
@@ -50,6 +51,9 @@ pub fn main() anyerror!u8 {
         printError("expected 1 URL but got {} arguments", .{args.len});
         return 1;
     }
+
+    try ssl.init();
+
     const urlString = args[0];
     const url = try ziget.url.parseUrl(urlString);
     const buffer = try allocator.alloc(u8, 8192);
