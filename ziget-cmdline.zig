@@ -54,7 +54,13 @@ pub fn main() anyerror!u8 {
 
     try ssl.init();
 
-    const urlString = args[0];
+    var urlString = args[0];
+
+    // default to http if no scheme provided
+    if (std.mem.indexOf(u8, urlString, "://") == null) {
+        urlString = try std.fmt.allocPrint(allocator, "http://{}", .{urlString});
+    }
+
     const url = try ziget.url.parseUrl(urlString);
     const buffer = try allocator.alloc(u8, 8192);
     defer allocator.free(buffer);
