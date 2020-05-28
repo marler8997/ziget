@@ -17,7 +17,8 @@ fn usage() void {
     std.debug.warn(
       \\Usage: ziget [-options] <url>
       \\Options:
-      \\  --out <file>         custom output file (use '-' for stdout)
+      \\  --out <file>         download to given file instead of url basename
+      \\  --stdout             download to stdout
       \\  --max-redirs <num>   maximum number of redirects, default is 50
       , .{});
 }
@@ -40,6 +41,7 @@ pub fn main() anyerror!u8 {
     args = args[1..];
 
     var outFilenameOption : ?[]const u8 = null;
+    var downloadToStdout = false;
     var maxRedirects : u16 = 50;
     {
         var newArgsLength : usize = 0;
@@ -52,6 +54,8 @@ pub fn main() anyerror!u8 {
                 newArgsLength += 1;
             } else if (std.mem.eql(u8, arg, "--out")) {
                 outFilenameOption = getArgOption(args, &i);
+            } else if (std.mem.eql(u8, arg, "--stdout")) {
+                downloadToStdout = true;
             } else if (std.mem.eql(u8, arg, "--max-redirs")) {
                 @panic("--max-redirs not implemented");
             } else if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
@@ -94,11 +98,15 @@ pub fn main() anyerror!u8 {
 
     const outFile = initOutFile: {
         const outFilename = initOutFilename: {
-            if (outFilenameOption) |name| {
-                if (std.mem.eql(u8, name, "-"))
-                    break :initOutFile std.io.getStdOut();
-                break :initOutFilename name;
+            if (downloadToStdout) {
+                if (outFilenameOption) |name| {
+                    printError("cannot specify both --stdout and --out", .{});
+                    return 1;
+                }
+                break :initOutFile std.io.getStdOut();
             }
+            if (outFilenameOption) |name|
+                break :initOutFilename name;
             const name = std.fs.path.basename(url.getPathString());
             if (name.len == 0)
                 break :initOutFilename "index.html";
