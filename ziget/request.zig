@@ -12,7 +12,6 @@ const Writer = readwrite.Writer;
 const FileReaderWriter = readwrite.FileReaderWriter;
 
 const urlmod = @import("./url.zig");
-const UrlScheme = urlmod.UrlScheme;
 const Url = urlmod.Url;
 
 const ziget = @import("../ziget.zig");
@@ -38,13 +37,13 @@ pub const DownloadOptions = struct {
 };
 
 // have to use anyerror for now because download and downloadHttp recursively call each other
-pub fn download(options: *DownloadOptions, url: Url) !void {
+pub fn download(options: *DownloadOptions, url: Url, writer: *Writer) !void {
     var nextUrl = url;
     while (true) {
         const result = switch (nextUrl) {
             .None => @panic("no scheme not implemented"),
             .Unknown => return error.UnknownUrlScheme,
-            .Http => |httpUrl| try downloadHttpOrRedirect(options, httpUrl),
+            .Http => |httpUrl| try downloadHttpOrRedirect(options, httpUrl, writer),
         };
         switch (result) {
             .Success => return,
@@ -124,7 +123,7 @@ pub fn forward(buffer: []u8, reader: *Reader, writer: *Writer) !void {
     }
 }
 
-pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !DownloadResult {
+pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http, writer: *Writer) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer {
         // TODO: file.shutdown()???
@@ -164,8 +163,8 @@ pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http) !Dow
     }
 
     if (response.dataLimit > response.headerLimit) {
-        try std.io.getStdOut().writeAll(buffer[response.headerLimit..response.dataLimit]);
+        try writer.write(buffer[response.headerLimit..response.dataLimit]);
     }
-    try forward(buffer, &rw.reader, &readwrite.stdoutWriter);
+    try forward(buffer, &rw.reader, writer);
     return DownloadResult.Success;
 }

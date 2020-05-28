@@ -39,8 +39,3 @@ pub const FileReaderWriter = struct {
         try self.file.writeAll(data);
     }
 };
-
-fn writeStdout(writer: *Writer, data: []const u8) anyerror!void {
-    try std.io.getStdOut().writeAll(data);
-}
-pub var stdoutWriter = Writer { .writeFn = writeStdout };

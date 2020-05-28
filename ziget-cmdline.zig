@@ -1,4 +1,8 @@
 const std = @import("std");
+
+const stdext = @import("stdext");
+const readwrite = stdext.readwrite;
+
 const ziget = @import("./ziget.zig");
 const ssl = @import("ssl");
 
@@ -13,8 +17,18 @@ fn usage() void {
     std.debug.warn(
       \\Usage: ziget [-options] <url>
       \\Options:
+      \\  --out <file>         custom output file (use '-' for stdout)
       \\  --max-redirs <num>   maximum number of redirects, default is 50
       , .{});
+}
+
+fn getArgOption(args: [][]const u8, i: *usize) []const u8 {
+    i.* = i.* + 1;
+    if (i.* >= args.len) {
+        printError("option {} requires an argument", .{args[i.* - 1]});
+        std.os.exit(1);
+    }
+    return args[i.*];
 }
 
 pub fn main() anyerror!u8 {
@@ -25,6 +39,7 @@ pub fn main() anyerror!u8 {
     }
     args = args[1..];
 
+    var outFilenameOption : ?[]const u8 = null;
     var maxRedirects : u16 = 50;
     {
         var newArgsLength : usize = 0;
@@ -35,6 +50,8 @@ pub fn main() anyerror!u8 {
             if (!std.mem.startsWith(u8, arg, "-")) {
                 args[newArgsLength] = arg;
                 newArgsLength += 1;
+            } else if (std.mem.eql(u8, arg, "--out")) {
+                outFilenameOption = getArgOption(args, &i);
             } else if (std.mem.eql(u8, arg, "--max-redirs")) {
                 @panic("--max-redirs not implemented");
             } else if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
@@ -73,7 +90,29 @@ pub fn main() anyerror!u8 {
         .buffer = buffer,
         .redirects = 0,
     };
-    ziget.request.download(&options, url) catch |e| switch (e) {
+
+
+    const outFile = initOutFile: {
+        const outFilename = initOutFilename: {
+            if (outFilenameOption) |name| {
+                if (std.mem.eql(u8, name, "-"))
+                    break :initOutFile std.io.getStdOut();
+                break :initOutFilename name;
+            }
+            const name = std.fs.path.basename(url.getPathString());
+            if (name.len == 0)
+                break :initOutFilename "index.html";
+            break :initOutFilename name;
+        };
+        break :initOutFile try std.fs.cwd().createFile(outFilename, .{});
+    };
+    defer {
+        if (outFile.handle != std.io.getStdOut().handle)
+            outFile.close();
+    }
+    var outFileRw = readwrite.FileReaderWriter.init(outFile);
+
+    ziget.request.download(&options, url, &outFileRw.rw.writer) catch |e| switch (e) {
         error.UnknownUrlScheme => {
             printError("unknown url scheme '{}'", .{url.schemeString()});
             return 1;

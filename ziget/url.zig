@@ -50,6 +50,14 @@ pub const Url = union(enum) {
         }
     }
 
+    pub fn getPathString(self: @This()) []const u8 {
+        switch (self) {
+            .None => @panic("no scheme not implemented"),
+            .Unknown => @panic("unknown scheme has no host"),
+            .Http => |u| return u.getPathString(),
+        }
+    }
+
     pub fn schemeString(self: @This()) []const u8 {
         return switch (self) {
             .None => |u| "",
