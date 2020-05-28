@@ -24,7 +24,7 @@ pub fn init() anyerror!void {
     if (1 != openssl.OPENSSL_init_ssl(0, null))
         return error.OpensslInitSslFailed;
 
-// NOTE: zig unable to translate this function
+    // NOTE: zig unable to translate this function
     //pub const OpenSSL_add_all_algorithms = @compileError("unable to translate C expr: expected identifier");
     //openssl.OpenSSL_add_all_algorithms();
     // NOTE: this should be roughly the same thing
@@ -47,6 +47,7 @@ pub fn init() anyerror!void {
 pub const SslConn = struct {
     rw: ReaderWriter,
     ctx: *openssl.SSL_CTX,
+    ssl: *openssl.SSL,
 
     pub fn init(file: std.fs.File, serverName: []const u8) !SslConn {
         //const method = openssl.TLSv1_2_client_method();
@@ -67,11 +68,11 @@ pub const SslConn = struct {
         _ = openssl.SSL_CTX_set_options(ctx, openssl.SSL_OP_NO_SSLv3);
         //_ = openssl.SSL_CTX_set_options(ctx, openssl.SSL_OP_NO_TLSv1);
         //_ = openssl.SSL_CTX_set_options(ctx, openssl.SSL_OP_NO_TLSv1_1);
-        const ssl = openssl.SSL_new(ctx);
-        if (ssl == null) {
+        const ssl = openssl.SSL_new(ctx) orelse {
             openssl.ERR_print_errors_fp(stderr);
             return error.OpensslNewFailed;
-        }
+        };
+        // TODO: does ssl need to be freed??? SSL_free?
 
         // TEMPORARY HACK to get around the non-const
         // https://ziglang.org doesn't work without the servername being set
@@ -105,7 +106,8 @@ pub const SslConn = struct {
                 .reader = .{ .readFn = read },
                 .writer = .{ .writeFn = write },
             },
-            .ctx = ctx
+            .ctx = ctx,
+            .ssl = ssl,
         };
     }
     pub fn deinit(self: SslConn) void {
@@ -114,13 +116,47 @@ pub const SslConn = struct {
     pub fn read(reader: *Reader, data: []u8) anyerror!usize {
         const self = @fieldParentPtr(SslConn, "rw",
             @fieldParentPtr(ReaderWriter, "reader", reader));
-        return error.SslReadNotImplemented;
-        //return try self.file.read(data);
+        var readSize : usize = undefined;
+        const result = openssl.SSL_read_ex(self.ssl, data.ptr, data.len, &readSize);
+        if (1 == result)
+            return readSize;
+
+        const err = openssl.SSL_get_error(self.ssl, result);
+        switch (err) {
+            openssl.SSL_ERROR_ZERO_RETURN => return 0,
+            else => std.debug.panic("SSL_read failed with {}\n", .{err}),
+        }
     }
     pub fn write(writer: *Writer, data: []const u8) anyerror!void {
         const self = @fieldParentPtr(SslConn, "rw",
             @fieldParentPtr(ReaderWriter, "writer", writer));
-        return error.SslWriteNotImplemented;
-        //try self.file.writeAll(data);
+        var written : usize = 0;
+        while (written < data.len) {
+            var writeSize = data.len - written;
+            if (writeSize > std.math.maxInt(c_int))
+                writeSize = std.math.maxInt(c_int);
+            const result = openssl.SSL_write(self.ssl, data.ptr + written, @intCast(c_int, writeSize));
+            if (result <= 0) {
+                const err = openssl.SSL_get_error(self.ssl, result);
+                switch (err) {
+                    openssl.SSL_ERROR_NONE => unreachable,
+                    openssl.SSL_ERROR_ZERO_RETURN => unreachable,
+                    openssl.SSL_ERROR_WANT_READ
+                    ,openssl.SSL_ERROR_WANT_WRITE
+                    ,openssl.SSL_ERROR_WANT_CONNECT
+                    ,openssl.SSL_ERROR_WANT_ACCEPT
+                    ,openssl.SSL_ERROR_WANT_X509_LOOKUP
+                    ,openssl.SSL_ERROR_WANT_ASYNC
+                    ,openssl.SSL_ERROR_WANT_ASYNC_JOB
+                    ,openssl.SSL_ERROR_WANT_CLIENT_HELLO_CB
+                    ,openssl.SSL_ERROR_SYSCALL
+                    ,openssl.SSL_ERROR_SSL
+                        => std.debug.panic("SSL_write failed with {}\n", .{err}),
+                    else
+                        => std.debug.panic("SSL_write failed with {}\n", .{err}),
+                }
+            }
+            written += @intCast(usize, result);
+        }
     }
 };
