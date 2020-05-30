@@ -73,6 +73,7 @@ pub fn main() anyerror!u8 {
         return 1;
     }
 
+    if (std.builtin.os.tag == .windows) _ = try std.os.windows.WSAStartup(2, 2);
     try ssl.init();
 
     var urlString = args[0];
