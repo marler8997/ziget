@@ -23,6 +23,7 @@ pub fn build(b: *Builder) !void {
 
     const exe = b.addExecutable("ziget", "ziget-cmdline.zig");
     exe.setTarget(target);
+    exe.single_threaded = true;
     exe.setBuildMode(mode);
     exe.addPackage(Pkg { .name = "stdext", .path = "src-stdext/stdext.zig" });
     if (openssl) {
