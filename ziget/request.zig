@@ -24,6 +24,7 @@ const DownloadResult = union(enum) {
     Redirect: Url,
 };
 
+/// Options for a download
 pub const DownloadOptions = struct {
     pub const Flag = struct {
         pub const bufferIsMaxHttpRequest  : u8 = 0x01;
@@ -33,29 +34,44 @@ pub const DownloadOptions = struct {
     allocator: *Allocator,
     maxRedirects: u32,
     buffer: []u8,
+};
+/// State that can change during a download
+pub const DownloadState = struct {
+    // TODO: use bufferState to manage the shared buffer in DownloadOptions
+    const BufferState = enum {
+        available,
+    };
+    bufferState: BufferState,
     redirects: u32,
+    pub fn init() DownloadState {
+        return .{
+            .bufferState = .available,
+            .redirects = 0,
+        };
+    }
 };
 
 // have to use anyerror for now because download and downloadHttp recursively call each other
-pub fn download(options: *DownloadOptions, url: Url, writer: *Writer) !void {
+pub fn download(url: Url, writer: *Writer, options: DownloadOptions, state: *DownloadState) !void {
     var nextUrl = url;
     while (true) {
         const result = switch (nextUrl) {
             .None => @panic("no scheme not implemented"),
             .Unknown => return error.UnknownUrlScheme,
-            .Http => |httpUrl| try downloadHttpOrRedirect(options, httpUrl, writer),
+            .Http => |httpUrl| try downloadHttpOrRedirect(httpUrl, writer, options, state),
         };
         switch (result) {
             .Success => return,
             .Redirect => |redirectUrl| {
-                options.redirects += 1;
-                if (options.redirects > options.maxRedirects)
+                state.redirects += 1;
+                if (state.redirects > options.maxRedirects)
                     return error.MaxRedirects;
                 nextUrl = redirectUrl;
             },
         }
     }
 }
+
 // TODO: should I provide this function?
 //pub fn downloadHttp(options: *DownloadOptions, httpUrl: Url.Http) !void {
 //    switch (try downloadHttpOrRedirect(options, httpUrl)) {
@@ -123,7 +139,7 @@ pub fn forward(buffer: []u8, reader: *Reader, writer: *Writer) !void {
     }
 }
 
-pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http, writer: *Writer) !DownloadResult {
+pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: *Writer, options: DownloadOptions, state: *DownloadState) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer {
         // TODO: file.shutdown()???
@@ -140,6 +156,7 @@ pub fn downloadHttpOrRedirect(options: *DownloadOptions, httpUrl: Url.Http, writ
     defer { if (httpUrl.secure) sslConn.deinit(); }
 
     try sendHttpGet(options.allocator, &rw.writer, httpUrl, false);
+
     const buffer = options.buffer;
     const response = try readHttpResponse(buffer, &rw.reader);
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});

@@ -86,14 +86,13 @@ pub fn main() anyerror!u8 {
     const url = try ziget.url.parseUrl(urlString);
     const buffer = try allocator.alloc(u8, 8192);
     defer allocator.free(buffer);
-    var options = ziget.request.DownloadOptions {
+    const options = ziget.request.DownloadOptions {
         .flags =
               ziget.request.DownloadOptions.Flag.bufferIsMaxHttpRequest
             | ziget.request.DownloadOptions.Flag.bufferIsMaxHttpResponse,
         .allocator = allocator,
         .maxRedirects = maxRedirects,
         .buffer = buffer,
-        .redirects = 0,
     };
 
 
@@ -121,7 +120,8 @@ pub fn main() anyerror!u8 {
     }
     var outFileRw = readwrite.FileReaderWriter.init(outFile);
 
-    ziget.request.download(&options, url, &outFileRw.rw.writer) catch |e| switch (e) {
+    var downloadState = ziget.request.DownloadState.init();
+    ziget.request.download(url, &outFileRw.rw.writer, options, &downloadState) catch |e| switch (e) {
         error.UnknownUrlScheme => {
             printError("unknown url scheme '{}'", .{url.schemeString()});
             return 1;
