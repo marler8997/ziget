@@ -25,7 +25,6 @@ pub fn build(b: *Builder) !void {
     exe.setTarget(target);
     exe.single_threaded = true;
     exe.setBuildMode(mode);
-    exe.addPackage(Pkg { .name = "stdext", .path = "src-stdext/stdext.zig" });
     if (openssl) {
         exe.addPackage(Pkg { .name = "ssl", .path = "openssl/ssl.zig" });
         exe.linkSystemLibrary("c");

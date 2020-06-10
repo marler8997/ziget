@@ -5,11 +5,8 @@ const testing = std.testing;
 
 const Allocator = mem.Allocator;
 
-const stdext = @import("stdext");
-const readwrite = stdext.readwrite;
-const Reader = readwrite.Reader;
-const Writer = readwrite.Writer;
-const FileReaderWriter = readwrite.FileReaderWriter;
+const net_stream = @import("./net_stream.zig");
+const NetStream = net_stream.NetStream;
 
 const urlmod = @import("./url.zig");
 const Url = urlmod.Url;
@@ -52,7 +49,7 @@ pub const DownloadState = struct {
 };
 
 // have to use anyerror for now because download and downloadHttp recursively call each other
-pub fn download(url: Url, writer: *Writer, options: DownloadOptions, state: *DownloadState) !void {
+pub fn download(url: Url, writer: var, options: DownloadOptions, state: *DownloadState) !void {
     var nextUrl = url;
     while (true) {
         const result = switch (nextUrl) {
@@ -94,7 +91,7 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
         method, resource, host, headers});
 }
 
-pub fn sendHttpGet(allocator: *Allocator, writer: *Writer, httpUrl: Url.Http, keepAlive: bool) !void {
+pub fn sendHttpGet(allocator: *Allocator, writer: var, httpUrl: Url.Http, keepAlive: bool) !void {
     const request = try httpAlloc(allocator, "GET", httpUrl.str,
         httpUrl.getHostPortString(),
         if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n"
@@ -104,14 +101,14 @@ pub fn sendHttpGet(allocator: *Allocator, writer: *Writer, httpUrl: Url.Http, ke
     std.debug.warn("Sending HTTP Request...\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     std.debug.warn("{}", .{request});
-    try writer.write(request);
+    try writer.writeAll(request);
 }
 
 const HttpResponseData = struct {
     headerLimit: usize,
     dataLimit: usize,
 };
-pub fn readHttpResponse(buffer: []u8, reader: *Reader) !HttpResponseData {
+pub fn readHttpResponse(buffer: []u8, reader: var) !HttpResponseData {
     var totalRead : usize = 0;
     while (true) {
         if (totalRead >= buffer.len)
@@ -131,34 +128,33 @@ pub fn readHttpResponse(buffer: []u8, reader: *Reader) !HttpResponseData {
 }
 
 // TODO: call sendFile on linux so we don't have to read the data into memory
-pub fn forward(buffer: []u8, reader: *Reader, writer: *Writer) !void {
+pub fn forward(buffer: []u8, reader: var, writer: var) !void {
     while (true) {
         var len = try reader.read(buffer);
         if (len == 0) break;
-        try writer.write(buffer[0..len]);
+        try writer.writeAll(buffer[0..len]);
     }
 }
 
-pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: *Writer, options: DownloadOptions, state: *DownloadState) !DownloadResult {
+pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: var, options: DownloadOptions, state: *DownloadState) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer {
         // TODO: file.shutdown()???
         file.close();
     }
-    var fileRw = FileReaderWriter.init(file);
-    var rw = &fileRw.rw;
+    var stream = NetStream.initFile(&file);
 
     var sslConn : ssl.SslConn = undefined;
     if (httpUrl.secure) {
         sslConn = try ssl.SslConn.init(file, httpUrl.getHostString());
-        rw = &sslConn.rw;
+        stream = NetStream.initSsl(&sslConn);
     }
     defer { if (httpUrl.secure) sslConn.deinit(); }
 
-    try sendHttpGet(options.allocator, &rw.writer, httpUrl, false);
+    try sendHttpGet(options.allocator, stream.writer(), httpUrl, false);
 
     const buffer = options.buffer;
-    const response = try readHttpResponse(buffer, &rw.reader);
+    const response = try readHttpResponse(buffer, stream.reader());
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
     std.debug.warn("Received Http Response:\n", .{});
     std.debug.warn("--------------------------------------------------------------------------------\n", .{});
@@ -180,8 +176,8 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: *Writer, options: Downl
     }
 
     if (response.dataLimit > response.headerLimit) {
-        try writer.write(buffer[response.headerLimit..response.dataLimit]);
+        try writer.writeAll(buffer[response.headerLimit..response.dataLimit]);
     }
-    try forward(buffer, &rw.reader, writer);
+    try forward(buffer, stream.reader(), writer);
     return DownloadResult.Success;
 }

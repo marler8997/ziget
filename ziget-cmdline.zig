@@ -1,8 +1,5 @@
 const std = @import("std");
 
-const stdext = @import("stdext");
-const readwrite = stdext.readwrite;
-
 const ziget = @import("./ziget.zig");
 const ssl = @import("ssl");
 
@@ -118,10 +115,9 @@ pub fn main() anyerror!u8 {
         if (outFile.handle != std.io.getStdOut().handle)
             outFile.close();
     }
-    var outFileRw = readwrite.FileReaderWriter.init(outFile);
 
     var downloadState = ziget.request.DownloadState.init();
-    ziget.request.download(url, &outFileRw.rw.writer, options, &downloadState) catch |e| switch (e) {
+    ziget.request.download(url, outFile.writer(), options, &downloadState) catch |e| switch (e) {
         error.UnknownUrlScheme => {
             printError("unknown url scheme '{}'", .{url.schemeString()});
             return 1;

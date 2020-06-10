@@ -1,13 +1,5 @@
 const std = @import("std");
 
-// TODO: why isn't this working?
-//const stdext = @import("stdext");
-const stdext= @import("../src-stdext/stdext.zig");
-const readwrite = stdext.readwrite;
-const Reader = readwrite.Reader;
-const Writer = readwrite.Writer;
-const ReaderWriter = readwrite.ReaderWriter;
-
 const openssl = @cImport({
     @cInclude("openssl/ssl.h");
     @cInclude("openssl/err.h");
@@ -45,7 +37,6 @@ pub fn init() anyerror!void {
 }
 
 pub const SslConn = struct {
-    rw: ReaderWriter,
     ctx: *openssl.SSL_CTX,
     ssl: *openssl.SSL,
 
@@ -102,10 +93,6 @@ pub const SslConn = struct {
         }
 
         return SslConn {
-            .rw = .{
-                .reader = .{ .readFn = read },
-                .writer = .{ .writeFn = write },
-            },
             .ctx = ctx,
             .ssl = ssl,
         };
@@ -113,9 +100,23 @@ pub const SslConn = struct {
     pub fn deinit(self: SslConn) void {
         openssl.SSL_CTX_free(self.ctx);
     }
-    pub fn read(reader: *Reader, data: []u8) anyerror!usize {
-        const self = @fieldParentPtr(SslConn, "rw",
-            @fieldParentPtr(ReaderWriter, "reader", reader));
+
+    //pub const ReadError = FnError(@TypeOf(readBoth));
+    //pub const WriteError = FnError(@TypeOf(writeBoth));
+    pub const ReadError = error { };
+    pub const WriteError = error { };
+    pub const Reader = std.io.Reader(*SslConn, ReadError, read);
+    pub const Writer = std.io.Writer(*SslConn, WriteError, write);
+
+    pub fn reader(self: *@This()) Reader {
+        return .{ .context = self };
+    }
+
+    pub fn writer(self: *@This()) Writer {
+        return .{ .context = self };
+    }
+
+    pub fn read(self: *SslConn, data: []u8) !usize {
         var readSize : usize = undefined;
         const result = openssl.SSL_read_ex(self.ssl, data.ptr, data.len, &readSize);
         if (1 == result)
@@ -127,36 +128,29 @@ pub const SslConn = struct {
             else => std.debug.panic("SSL_read failed with {}\n", .{err}),
         }
     }
-    pub fn write(writer: *Writer, data: []const u8) anyerror!void {
-        const self = @fieldParentPtr(SslConn, "rw",
-            @fieldParentPtr(ReaderWriter, "writer", writer));
-        var written : usize = 0;
-        while (written < data.len) {
-            var writeSize = data.len - written;
-            if (writeSize > std.math.maxInt(c_int))
-                writeSize = std.math.maxInt(c_int);
-            const result = openssl.SSL_write(self.ssl, data.ptr + written, @intCast(c_int, writeSize));
-            if (result <= 0) {
-                const err = openssl.SSL_get_error(self.ssl, result);
-                switch (err) {
-                    openssl.SSL_ERROR_NONE => unreachable,
-                    openssl.SSL_ERROR_ZERO_RETURN => unreachable,
-                    openssl.SSL_ERROR_WANT_READ
-                    ,openssl.SSL_ERROR_WANT_WRITE
-                    ,openssl.SSL_ERROR_WANT_CONNECT
-                    ,openssl.SSL_ERROR_WANT_ACCEPT
-                    ,openssl.SSL_ERROR_WANT_X509_LOOKUP
-                    ,openssl.SSL_ERROR_WANT_ASYNC
-                    ,openssl.SSL_ERROR_WANT_ASYNC_JOB
-                    ,openssl.SSL_ERROR_WANT_CLIENT_HELLO_CB
-                    ,openssl.SSL_ERROR_SYSCALL
-                    ,openssl.SSL_ERROR_SSL
-                        => std.debug.panic("SSL_write failed with {}\n", .{err}),
-                    else
-                        => std.debug.panic("SSL_write failed with {}\n", .{err}),
-                }
+    pub fn write(self: *SslConn, data: []const u8) !usize {
+        // TODO: and writeSize with c_int mask, it's ok if we don't write all the data
+        const result = openssl.SSL_write(self.ssl, data.ptr, @intCast(c_int, data.len));
+        if (result <= 0) {
+            const err = openssl.SSL_get_error(self.ssl, result);
+            switch (err) {
+                openssl.SSL_ERROR_NONE => unreachable,
+                openssl.SSL_ERROR_ZERO_RETURN => unreachable,
+                openssl.SSL_ERROR_WANT_READ
+                ,openssl.SSL_ERROR_WANT_WRITE
+                ,openssl.SSL_ERROR_WANT_CONNECT
+                ,openssl.SSL_ERROR_WANT_ACCEPT
+                ,openssl.SSL_ERROR_WANT_X509_LOOKUP
+                ,openssl.SSL_ERROR_WANT_ASYNC
+                ,openssl.SSL_ERROR_WANT_ASYNC_JOB
+                ,openssl.SSL_ERROR_WANT_CLIENT_HELLO_CB
+                ,openssl.SSL_ERROR_SYSCALL
+                ,openssl.SSL_ERROR_SSL
+                    => std.debug.panic("SSL_write failed with {}\n", .{err}),
+                else
+                    => std.debug.panic("SSL_write failed with {}\n", .{err}),
             }
-            written += @intCast(usize, result);
         }
+        return @intCast(usize, result);
     }
 };
