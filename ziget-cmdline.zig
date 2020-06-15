@@ -87,8 +87,9 @@ pub fn main() anyerror!u8 {
         .maxRedirects = maxRedirects,
         .forwardBufferSize = 8192,
         .maxHttpResponseHeaders = 8192,
+        .onHttpRequest = sendingHttpRequest,
+        .onHttpResponse = receivedHttpResponse,
     };
-
 
     const outFile = initOutFile: {
         const outFilename = initOutFilename: {
@@ -122,4 +123,17 @@ pub fn main() anyerror!u8 {
         else => return e,
     };
     return 0;
+}
+
+fn sendingHttpRequest(request: []const u8) void {
+    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    std.debug.warn("Sending HTTP Request...\n", .{});
+    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    std.debug.warn("{}", .{request});
+}
+fn receivedHttpResponse(response: []const u8) void {
+    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    std.debug.warn("Received Http Response:\n", .{});
+    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+    std.debug.warn("{}", .{response});
 }

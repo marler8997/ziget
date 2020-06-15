@@ -32,6 +32,8 @@ pub const DownloadOptions = struct {
     maxRedirects: u32,
     forwardBufferSize: u32,
     maxHttpResponseHeaders: u32,
+    onHttpRequest: fn(request: []const u8) void,
+    onHttpResponse: fn(response: []const u8) void,
 };
 /// State that can change during a download
 pub const DownloadState = struct {
@@ -105,18 +107,19 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
         method, resource, host, headers});
 }
 
-pub fn sendHttpGet(allocator: *Allocator, writer: var, httpUrl: Url.Http, keepAlive: bool) !void {
-    const request = try httpAlloc(allocator, "GET", httpUrl.str,
-        httpUrl.getHostPortString(),
-        if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n"
-    );
-    defer allocator.free(request);
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("Sending HTTP Request...\n", .{});
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("{}", .{request});
-    try writer.writeAll(request);
-}
+//pub fn sendHttpGet(allocator: *Allocator, writer: var, httpUrl: Url.Http, keepAlive: bool) !void {
+//    const request = try httpAlloc(allocator, "GET", httpUrl.str,
+//        httpUrl.getHostPortString(),
+//        if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n"
+//    );
+//    defer allocator.free(request);
+//
+//    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+//    std.debug.warn("Sending HTTP Request...\n", .{});
+//    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+//    std.debug.warn("{}", .{request});
+//    try writer.writeAll(request);
+//}
 
 const HttpResponse = struct {
     buffer: []u8,
@@ -182,18 +185,22 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: var, options: DownloadO
     }
     defer { if (httpUrl.secure) sslConn.deinit(); }
 
-    try sendHttpGet(options.allocator, stream.writer(), httpUrl, false);
+    {
+        const request = try httpAlloc(options.allocator, "GET", httpUrl.str,
+            httpUrl.getHostPortString(),
+            "Connection: close\r\n",
+        );
+        defer options.allocator.free(request);
+        options.onHttpRequest(request);
+        try stream.writer().writeAll(request);
+    }
 
     {
         const response = try readHttpResponse(options.allocator, stream.reader(),
             std.math.min(4096, options.maxHttpResponseHeaders), options.maxHttpResponseHeaders);
         defer options.allocator.free(response.buffer);
         const httpResponse = response.getHttpSlice();
-
-        std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-        std.debug.warn("Received Http Response:\n", .{});
-        std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-        std.debug.warn("{}", .{httpResponse});
+        options.onHttpResponse(httpResponse);
         {
             const status = try http.parse.parseHttpStatusLine(httpResponse);
             if (status.code != 200) {
