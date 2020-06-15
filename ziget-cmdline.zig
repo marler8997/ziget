@@ -81,15 +81,12 @@ pub fn main() anyerror!u8 {
     }
 
     const url = try ziget.url.parseUrl(urlString);
-    const buffer = try allocator.alloc(u8, 8192);
-    defer allocator.free(buffer);
     const options = ziget.request.DownloadOptions {
-        .flags =
-              ziget.request.DownloadOptions.Flag.bufferIsMaxHttpRequest
-            | ziget.request.DownloadOptions.Flag.bufferIsMaxHttpResponse,
+        .flags = 0,
         .allocator = allocator,
         .maxRedirects = maxRedirects,
-        .buffer = buffer,
+        .forwardBufferSize = 8192,
+        .maxHttpResponseHeaders = 8192,
     };
 
 

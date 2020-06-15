@@ -18,19 +18,20 @@ const ssl = @import("ssl");
 
 const DownloadResult = union(enum) {
     Success: void,
-    Redirect: Url,
+    Redirect: []u8,
 };
 
 /// Options for a download
 pub const DownloadOptions = struct {
     pub const Flag = struct {
-        pub const bufferIsMaxHttpRequest  : u8 = 0x01;
-        pub const bufferIsMaxHttpResponse : u8 = 0x02;
+        //pub const bufferIsMaxHttpRequest  : u8 = 0x01;
+        //pub const bufferIsMaxHttpResponse : u8 = 0x02;
     };
     flags: u8,
     allocator: *Allocator,
     maxRedirects: u32,
-    buffer: []u8,
+    forwardBufferSize: u32,
+    maxHttpResponseHeaders: u32,
 };
 /// State that can change during a download
 pub const DownloadState = struct {
@@ -48,9 +49,19 @@ pub const DownloadState = struct {
     }
 };
 
+fn optionalFree(allocator: *Allocator, comptime T: type, optionalBuf: ?[]T) void {
+    if (optionalBuf) |buf| {
+        allocator.free(buf);
+    }
+}
+
 // have to use anyerror for now because download and downloadHttp recursively call each other
 pub fn download(url: Url, writer: var, options: DownloadOptions, state: *DownloadState) !void {
+    var urlStringToFree: ?[]u8 = null;
+    defer optionalFree(options.allocator, u8, urlStringToFree);
+
     var nextUrl = url;
+
     while (true) {
         const result = switch (nextUrl) {
             .None => @panic("no scheme not implemented"),
@@ -59,11 +70,14 @@ pub fn download(url: Url, writer: var, options: DownloadOptions, state: *Downloa
         };
         switch (result) {
             .Success => return,
-            .Redirect => |redirectUrl| {
+            .Redirect => |redirectUrlString| {
+                optionalFree(options.allocator, u8, urlStringToFree);
+                urlStringToFree = redirectUrlString;
+
                 state.redirects += 1;
                 if (state.redirects > options.maxRedirects)
                     return error.MaxRedirects;
-                nextUrl = redirectUrl;
+                nextUrl = try ziget.url.parseUrl(redirectUrlString);
             },
         }
     }
@@ -104,25 +118,42 @@ pub fn sendHttpGet(allocator: *Allocator, writer: var, httpUrl: Url.Http, keepAl
     try writer.writeAll(request);
 }
 
-const HttpResponseData = struct {
-    headerLimit: usize,
+const HttpResponse = struct {
+    buffer: []u8,
+    httpLimit: usize,
     dataLimit: usize,
+    pub fn getHttpSlice(self: HttpResponse) []u8 {
+        return self.buffer[0..self.httpLimit];
+    }
+    pub fn hasData(self: HttpResponse) bool {
+        return self.dataLimit > self.httpLimit;
+    }
+    pub fn getDataSlice(self: HttpResponse) []u8 {
+        return self.buffer[self.httpLimit..self.dataLimit];
+    }
 };
-pub fn readHttpResponse(buffer: []u8, reader: var) !HttpResponseData {
+pub fn readHttpResponse(allocator: *Allocator, reader: var, initialBufferLen: usize, maxBufferLen: usize) !HttpResponse {
+    var buffer = try allocator.alloc(u8, initialBufferLen);
+    errdefer allocator.free(buffer);
+
     var totalRead : usize = 0;
     while (true) {
-        if (totalRead >= buffer.len)
-            return error.HttpResponseHeaderTooBig;
+        if (totalRead >= buffer.len) {
+            if (buffer.len >= maxBufferLen)
+                return error.HttpResponseTooBig;
+            // TODO: is this right with the errdefer free?
+            buffer = try allocator.realloc(buffer, std.math.min(maxBufferLen, 2 * buffer.len));
+        }
         var len = try reader.read(buffer[totalRead..]);
         if (len == 0) return error.HttpResponseIncomplete;
-        var headerLimit = totalRead;
+        var headersLimit = totalRead;
         totalRead = totalRead + len;
-        if (headerLimit <= 3)
-            headerLimit += 3;
-        while (headerLimit < totalRead) {
-            headerLimit += 1;
-            if (ziget.mem.cmp(u8, buffer[headerLimit - 4..].ptr, "\r\n\r\n", 4))
-                return HttpResponseData { .headerLimit = headerLimit, .dataLimit = totalRead };
+        if (headersLimit <= 3)
+            headersLimit += 3;
+        while (headersLimit < totalRead) {
+            headersLimit += 1;
+            if (ziget.mem.cmp(u8, buffer[headersLimit - 4..].ptr, "\r\n\r\n", 4))
+                return HttpResponse { .buffer = buffer, .httpLimit = headersLimit, .dataLimit = totalRead };
         }
     }
 }
@@ -153,31 +184,38 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: var, options: DownloadO
 
     try sendHttpGet(options.allocator, stream.writer(), httpUrl, false);
 
-    const buffer = options.buffer;
-    const response = try readHttpResponse(buffer, stream.reader());
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("Received Http Response:\n", .{});
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("{}", .{buffer[0..response.headerLimit]});
-    const httpResponse = buffer[0..response.headerLimit];
     {
-        const status = try http.parse.parseHttpStatusLine(httpResponse);
-        if (status.code != 200) {
-            const headers = buffer[status.len..];
-            if (status.code == 301) {
-                // TODO: create copy of location url
-                const location = (try http.parse.parseHeaderValue(headers, "Location")) orelse
-                    return error.HttpRedirectNoLocation;
-                return DownloadResult { .Redirect = try ziget.url.parseUrl(location) };
+        const response = try readHttpResponse(options.allocator, stream.reader(),
+            std.math.min(4096, options.maxHttpResponseHeaders), options.maxHttpResponseHeaders);
+        defer options.allocator.free(response.buffer);
+        const httpResponse = response.getHttpSlice();
+
+        std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+        std.debug.warn("Received Http Response:\n", .{});
+        std.debug.warn("--------------------------------------------------------------------------------\n", .{});
+        std.debug.warn("{}", .{httpResponse});
+        {
+            const status = try http.parse.parseHttpStatusLine(httpResponse);
+            if (status.code != 200) {
+                const headers = httpResponse[status.len..];
+                if (status.code == 301) {
+                    // TODO: create copy of location url
+                    const location = (try http.parse.parseHeaderValue(headers, "Location")) orelse
+                        return error.HttpRedirectNoLocation;
+                    const locationCopy = try options.allocator.dupe(u8, location);
+                    return DownloadResult { .Redirect = locationCopy };
+                }
+                std.debug.warn("Non 200 status code: {} {}\n", .{status.code, status.getMsg(httpResponse)});
+                return error.HttpNon200StatusCode;
             }
-            std.debug.warn("Non 200 status code: {} {}\n", .{status.code, status.getMsg(httpResponse)});
-            return error.HttpNon200StatusCode;
+        }
+
+        if (response.hasData()) {
+            try writer.writeAll(response.getDataSlice());
         }
     }
-
-    if (response.dataLimit > response.headerLimit) {
-        try writer.writeAll(buffer[response.headerLimit..response.dataLimit]);
-    }
+    var buffer = try options.allocator.alloc(u8, options.forwardBufferSize);
+    defer options.allocator.free(buffer);
     try forward(buffer, stream.reader(), writer);
     return DownloadResult.Success;
 }
