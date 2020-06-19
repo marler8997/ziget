@@ -5,7 +5,18 @@ const openssl = @cImport({
     @cInclude("openssl/err.h");
 });
 
-extern "c" var stderr: [*c]openssl.FILE;
+usingnamespace if (std.builtin.os.tag == .windows) struct { } else struct {
+    pub extern "c" var stderr: [*c]openssl.FILE;
+};
+
+fn ERR_print_errors_fp() void {
+    // windows doesn't have `stderr`, so not sure what to do here yet
+    if (std.builtin.os.tag == .windows) {
+        std.debug.warn("windows openssl error, unable to print it yet\n", .{});
+        return;
+    }
+    openssl.ERR_print_errors_fp(stderr);
+}
 
 pub fn init() anyerror!void {
     std.debug.warn("[DEBUG] openssl init\n", .{});
@@ -46,7 +57,7 @@ pub const SslConn = struct {
         //const method = openssl.TLS_method();
         const method = openssl.SSLv23_method();
         const ctx = openssl.SSL_CTX_new(method) orelse {
-            openssl.ERR_print_errors_fp(stderr);
+            ERR_print_errors_fp();
             return error.OpensslNewContextFailed;
         };
         errdefer openssl.SSL_CTX_free(ctx);
@@ -60,7 +71,7 @@ pub const SslConn = struct {
         //_ = openssl.SSL_CTX_set_options(ctx, openssl.SSL_OP_NO_TLSv1);
         //_ = openssl.SSL_CTX_set_options(ctx, openssl.SSL_OP_NO_TLSv1_1);
         const ssl = openssl.SSL_new(ctx) orelse {
-            openssl.ERR_print_errors_fp(stderr);
+            ERR_print_errors_fp();
             return error.OpensslNewFailed;
         };
         // TODO: does ssl need to be freed??? SSL_free?
@@ -75,19 +86,19 @@ pub const SslConn = struct {
         //if (1 != openssl.SSL_set_tlsext_host_name(ssl, hostnameSlice.ptr)) {
         if (1 != openssl.SSL_ctrl(ssl, openssl.SSL_CTRL_SET_TLSEXT_HOSTNAME,
             openssl.TLSEXT_NAMETYPE_host_name, hostnameSlice.ptr)) {
-            openssl.ERR_print_errors_fp(stderr);
+            ERR_print_errors_fp();
             return error.OpensslSetHostNameFailed;
         }
 
-        if (1 != openssl.SSL_set_fd(ssl, file.handle)) {
-            openssl.ERR_print_errors_fp(stderr);
+        if (1 != openssl.SSL_set_fd(ssl, fileToCHandle(file))) {
+            ERR_print_errors_fp();
             return error.OpensslSetFdFailed;
         }
         {
             const result = openssl.SSL_connect(ssl);
             if (result != 1) {
                 std.debug.warn("SSL_connect failed with {}\n", .{result});
-                openssl.ERR_print_errors_fp(stderr);
+                ERR_print_errors_fp();
                 return error.OpensslConnectFailed;
             }
         }
@@ -154,3 +165,11 @@ pub const SslConn = struct {
         return @intCast(usize, result);
     }
 };
+
+fn fileToCHandle(file: std.fs.File)
+    if (std.builtin.os.tag == .windows) c_int else std.os.fd_t {
+
+    if (std.builtin.os.tag == .windows)
+        return @intCast(c_int, @ptrToInt(file.handle));
+    return file.handle;
+}
