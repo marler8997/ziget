@@ -6,7 +6,7 @@ const ssl = @import("ssl");
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = &arena.allocator;
 
-fn printError(comptime fmt: []const u8, args: var) void {
+fn printError(comptime fmt: []const u8, args: anytype) void {
   std.debug.warn("Error: " ++ fmt ++ "\n", args);
 }
 

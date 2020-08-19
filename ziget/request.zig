@@ -58,7 +58,7 @@ fn optionalFree(allocator: *Allocator, comptime T: type, optionalBuf: ?[]T) void
 }
 
 // have to use anyerror for now because download and downloadHttp recursively call each other
-pub fn download(url: Url, writer: var, options: DownloadOptions, state: *DownloadState) !void {
+pub fn download(url: Url, writer: anytype, options: DownloadOptions, state: *DownloadState) !void {
     var urlStringToFree: ?[]u8 = null;
     defer optionalFree(options.allocator, u8, urlStringToFree);
 
@@ -107,7 +107,7 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
         method, resource, host, headers});
 }
 
-//pub fn sendHttpGet(allocator: *Allocator, writer: var, httpUrl: Url.Http, keepAlive: bool) !void {
+//pub fn sendHttpGet(allocator: *Allocator, writer: anytype, httpUrl: Url.Http, keepAlive: bool) !void {
 //    const request = try httpAlloc(allocator, "GET", httpUrl.str,
 //        httpUrl.getHostPortString(),
 //        if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n"
@@ -135,7 +135,7 @@ const HttpResponse = struct {
         return self.buffer[self.httpLimit..self.dataLimit];
     }
 };
-pub fn readHttpResponse(allocator: *Allocator, reader: var, initialBufferLen: usize, maxBufferLen: usize) !HttpResponse {
+pub fn readHttpResponse(allocator: *Allocator, reader: anytype, initialBufferLen: usize, maxBufferLen: usize) !HttpResponse {
     var buffer = try allocator.alloc(u8, initialBufferLen);
     errdefer allocator.free(buffer);
 
@@ -162,7 +162,7 @@ pub fn readHttpResponse(allocator: *Allocator, reader: var, initialBufferLen: us
 }
 
 // TODO: call sendFile on linux so we don't have to read the data into memory
-pub fn forward(buffer: []u8, reader: var, writer: var) !void {
+pub fn forward(buffer: []u8, reader: anytype, writer: anytype) !void {
     while (true) {
         var len = try reader.read(buffer);
         if (len == 0) break;
@@ -170,7 +170,7 @@ pub fn forward(buffer: []u8, reader: var, writer: var) !void {
     }
 }
 
-pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: var, options: DownloadOptions, state: *DownloadState) !DownloadResult {
+pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: DownloadOptions, state: *DownloadState) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer {
         // TODO: file.shutdown()???
