@@ -73,7 +73,7 @@ pub fn main() anyerror!u8 {
     if (std.builtin.os.tag == .windows) _ = try std.os.windows.WSAStartup(2, 2);
     try ssl.init();
 
-    var urlString = args[0];
+    var urlString : []const u8 = args[0];
 
     // default to http if no scheme provided
     if (std.mem.indexOf(u8, urlString, "://") == null) {
