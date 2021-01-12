@@ -100,9 +100,9 @@ pub fn download(url: Url, writer: anytype, options: DownloadOptions, state: *Dow
 
 pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8, host: []const u8,headers: []const u8) ![]const u8 {
     return try std.fmt.allocPrint(allocator,
-           "{} {} HTTP/1.1\r\n"
-        ++ "Host: {}\r\n"
-        ++ "{}"
+           "{s} {s} HTTP/1.1\r\n"
+        ++ "Host: {s}\r\n"
+        ++ "{s}"
         ++ "\r\n", .{
         method, resource, host, headers});
 }
@@ -114,10 +114,10 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
 //    );
 //    defer allocator.free(request);
 //
-//    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-//    std.debug.warn("Sending HTTP Request...\n", .{});
-//    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-//    std.debug.warn("{}", .{request});
+//    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+//    std.debug.print("Sending HTTP Request...\n", .{});
+//    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+//    std.debug.print("{s}", .{request});
 //    try writer.writeAll(request);
 //}
 
@@ -212,7 +212,7 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: Downl
                     const locationCopy = try options.allocator.dupe(u8, location);
                     return DownloadResult { .Redirect = locationCopy };
                 }
-                std.debug.warn("Non 200 status code: {} {}\n", .{status.code, status.getMsg(httpResponse)});
+                std.debug.print("Non 200 status code: {d} {s}\n", .{status.code, status.getMsg(httpResponse)});
                 return error.HttpNon200StatusCode;
             }
         }

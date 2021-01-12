@@ -12,14 +12,14 @@ usingnamespace if (std.builtin.os.tag == .windows) struct { } else struct {
 fn ERR_print_errors_fp() void {
     // windows doesn't have `stderr`, so not sure what to do here yet
     if (std.builtin.os.tag == .windows) {
-        std.debug.warn("windows openssl error, unable to print it yet\n", .{});
+        std.debug.print("windows openssl error, unable to print it yet\n", .{});
         return;
     }
     openssl.ERR_print_errors_fp(stderr);
 }
 
 pub fn init() anyerror!void {
-    std.debug.warn("[DEBUG] openssl init\n", .{});
+    std.debug.print("[DEBUG] openssl init\n", .{});
 
     // NOTE: zig unable to translate this function
     // pub const SSL_library_init = @compileError("unable to translate C expr: expected identifier");
@@ -97,7 +97,7 @@ pub const SslConn = struct {
         {
             const result = openssl.SSL_connect(ssl);
             if (result != 1) {
-                std.debug.warn("SSL_connect failed with {}\n", .{result});
+                std.debug.print("SSL_connect failed with {d}\n", .{result});
                 ERR_print_errors_fp();
                 return error.OpensslConnectFailed;
             }
@@ -136,7 +136,7 @@ pub const SslConn = struct {
         const err = openssl.SSL_get_error(self.ssl, result);
         switch (err) {
             openssl.SSL_ERROR_ZERO_RETURN => return 0,
-            else => std.debug.panic("SSL_read failed with {}\n", .{err}),
+            else => std.debug.panic("SSL_read failed with {d}\n", .{err}),
         }
     }
     pub fn write(self: *SslConn, data: []const u8) !usize {
@@ -157,9 +157,9 @@ pub const SslConn = struct {
                 ,openssl.SSL_ERROR_WANT_CLIENT_HELLO_CB
                 ,openssl.SSL_ERROR_SYSCALL
                 ,openssl.SSL_ERROR_SSL
-                    => std.debug.panic("SSL_write failed with {}\n", .{err}),
+                    => std.debug.panic("SSL_write failed with {d}\n", .{err}),
                 else
-                    => std.debug.panic("SSL_write failed with {}\n", .{err}),
+                    => std.debug.panic("SSL_write failed with {d}\n", .{err}),
             }
         }
         return @intCast(usize, result);
