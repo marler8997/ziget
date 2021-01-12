@@ -23,7 +23,7 @@ fn usage() void {
 fn getArgOption(args: [][]const u8, i: *usize) []const u8 {
     i.* = i.* + 1;
     if (i.* >= args.len) {
-        printError("option {} requires an argument", .{args[i.* - 1]});
+        printError("option {s} requires an argument", .{args[i.* - 1]});
         std.os.exit(1);
     }
     return args[i.*];
@@ -59,7 +59,7 @@ pub fn main() anyerror!u8 {
                 usage();
                 return 1;
             } else {
-                printError("unknown option '{}'", .{arg});
+                printError("unknown option '{s}'", .{arg});
                 return 1;
             }
         }
@@ -77,7 +77,7 @@ pub fn main() anyerror!u8 {
 
     // default to http if no scheme provided
     if (std.mem.indexOf(u8, urlString, "://") == null) {
-        urlString = try std.fmt.allocPrint(allocator, "http://{}", .{urlString});
+        urlString = try std.fmt.allocPrint(allocator, "http://{s}", .{urlString});
     }
 
     const url = try ziget.url.parseUrl(urlString);
@@ -117,7 +117,7 @@ pub fn main() anyerror!u8 {
     var downloadState = ziget.request.DownloadState.init();
     ziget.request.download(url, outFile.writer(), options, &downloadState) catch |e| switch (e) {
         error.UnknownUrlScheme => {
-            printError("unknown url scheme '{}'", .{url.schemeString()});
+            printError("unknown url scheme '{s}'", .{url.schemeString()});
             return 1;
         },
         else => return e,
@@ -129,11 +129,11 @@ fn sendingHttpRequest(request: []const u8) void {
     std.debug.print("--------------------------------------------------------------------------------\n", .{});
     std.debug.print("Sending HTTP Request...\n", .{});
     std.debug.print("--------------------------------------------------------------------------------\n", .{});
-    std.debug.print("{}", .{request});
+    std.debug.print("{s}", .{request});
 }
 fn receivedHttpResponse(response: []const u8) void {
     std.debug.print("--------------------------------------------------------------------------------\n", .{});
     std.debug.print("Received Http Response:\n", .{});
     std.debug.print("--------------------------------------------------------------------------------\n", .{});
-    std.debug.print("{}", .{response});
+    std.debug.print("{s}", .{response});
 }

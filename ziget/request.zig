@@ -117,7 +117,7 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
 //    std.debug.print("--------------------------------------------------------------------------------\n", .{});
 //    std.debug.print("Sending HTTP Request...\n", .{});
 //    std.debug.print("--------------------------------------------------------------------------------\n", .{});
-//    std.debug.print("{}", .{request});
+//    std.debug.print("{s}", .{request});
 //    try writer.writeAll(request);
 //}
 
