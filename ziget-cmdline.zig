@@ -7,11 +7,11 @@ var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = &arena.allocator;
 
 fn printError(comptime fmt: []const u8, args: anytype) void {
-  std.debug.warn("Error: " ++ fmt ++ "\n", args);
+  std.debug.print("Error: " ++ fmt ++ "\n", args);
 }
 
 fn usage() void {
-    std.debug.warn(
+    std.debug.print(
       \\Usage: ziget [-options] <url>
       \\Options:
       \\  --out <file>         download to given file instead of url basename
@@ -126,14 +126,14 @@ pub fn main() anyerror!u8 {
 }
 
 fn sendingHttpRequest(request: []const u8) void {
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("Sending HTTP Request...\n", .{});
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("{}", .{request});
+    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+    std.debug.print("Sending HTTP Request...\n", .{});
+    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+    std.debug.print("{}", .{request});
 }
 fn receivedHttpResponse(response: []const u8) void {
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("Received Http Response:\n", .{});
-    std.debug.warn("--------------------------------------------------------------------------------\n", .{});
-    std.debug.warn("{}", .{response});
+    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+    std.debug.print("Received Http Response:\n", .{});
+    std.debug.print("--------------------------------------------------------------------------------\n", .{});
+    std.debug.print("{}", .{response});
 }

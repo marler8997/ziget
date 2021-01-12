@@ -40,7 +40,7 @@ pub fn build(b: *Builder) !void {
         exe.addPackage(Pkg { .name = "ssl", .path = "nossl/ssl.zig" });
     }
     //if (wolfssl) {
-    //    std.debug.warn("Error: -Dwolfssl=true not implemented", .{});
+    //    std.debug.print("Error: -Dwolfssl=true not implemented", .{});
     //    std.os.exit(1);
     //}
     exe.install();
@@ -54,7 +54,7 @@ pub fn build(b: *Builder) !void {
 
 fn setupOpensslWindows(b: *Builder, exe: *std.build.LibExeObjStep) !void {
     const openssl_path = b.option([]const u8, "openssl-path", "path to openssl (for Windows)") orelse {
-        std.debug.warn("Error: -Dopenssl on windows requires -Dopenssl-path=DIR to be specified\n", .{});
+        std.debug.print("Error: -Dopenssl on windows requires -Dopenssl-path=DIR to be specified\n", .{});
         std.os.exit(1);
     };
     // NOTE: right now these files are hardcoded to the files expected when installing SSL via
