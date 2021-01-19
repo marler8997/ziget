@@ -32,8 +32,8 @@ pub const DownloadOptions = struct {
     maxRedirects: u32,
     forwardBufferSize: u32,
     maxHttpResponseHeaders: u32,
-    onHttpRequest: fn(request: []const u8) void,
-    onHttpResponse: fn(response: []const u8) void,
+    onHttpRequest: fn (request: []const u8) void,
+    onHttpResponse: fn (response: []const u8) void,
 };
 /// State that can change during a download
 pub const DownloadState = struct {
@@ -98,13 +98,8 @@ pub fn download(url: Url, writer: anytype, options: DownloadOptions, state: *Dow
 //    }
 //}
 
-pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8, host: []const u8,headers: []const u8) ![]const u8 {
-    return try std.fmt.allocPrint(allocator,
-           "{s} {s} HTTP/1.1\r\n"
-        ++ "Host: {s}\r\n"
-        ++ "{s}"
-        ++ "\r\n", .{
-        method, resource, host, headers});
+pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8, host: []const u8, headers: []const u8) ![]const u8 {
+    return try std.fmt.allocPrint(allocator, "{s} {s} HTTP/1.1\r\n" ++ "Host: {s}\r\n" ++ "{s}" ++ "\r\n", .{ method, resource, host, headers });
 }
 
 //pub fn sendHttpGet(allocator: *Allocator, writer: anytype, httpUrl: Url.Http, keepAlive: bool) !void {
@@ -139,7 +134,7 @@ pub fn readHttpResponse(allocator: *Allocator, reader: anytype, initialBufferLen
     var buffer = try allocator.alloc(u8, initialBufferLen);
     errdefer allocator.free(buffer);
 
-    var totalRead : usize = 0;
+    var totalRead: usize = 0;
     while (true) {
         if (totalRead >= buffer.len) {
             if (buffer.len >= maxBufferLen)
@@ -155,8 +150,8 @@ pub fn readHttpResponse(allocator: *Allocator, reader: anytype, initialBufferLen
             headersLimit += 3;
         while (headersLimit < totalRead) {
             headersLimit += 1;
-            if (ziget.mem.cmp(u8, buffer[headersLimit - 4..].ptr, "\r\n\r\n", 4))
-                return HttpResponse { .buffer = buffer, .httpLimit = headersLimit, .dataLimit = totalRead };
+            if (ziget.mem.cmp(u8, buffer[headersLimit - 4 ..].ptr, "\r\n\r\n", 4))
+                return HttpResponse{ .buffer = buffer, .httpLimit = headersLimit, .dataLimit = totalRead };
         }
     }
 }
@@ -171,22 +166,27 @@ pub fn forward(buffer: []u8, reader: anytype, writer: anytype) !void {
 }
 
 pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: DownloadOptions, state: *DownloadState) !DownloadResult {
-    const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
+    const s = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer {
         // TODO: file.shutdown()???
-        file.close();
+        s.close();
     }
-    var stream = NetStream.initFile(&file);
+    var stream = NetStream.initStream(&s);
 
-    var sslConn : ssl.SslConn = undefined;
+    var sslConn: ssl.SslConn = undefined;
     if (httpUrl.secure) {
-        sslConn = try ssl.SslConn.init(file, httpUrl.getHostString());
+        sslConn = try ssl.SslConn.init(s, httpUrl.getHostString());
         stream = NetStream.initSsl(&sslConn);
     }
-    defer { if (httpUrl.secure) sslConn.deinit(); }
+    defer {
+        if (httpUrl.secure) sslConn.deinit();
+    }
 
     {
-        const request = try httpAlloc(options.allocator, "GET", httpUrl.str,
+        const request = try httpAlloc(
+            options.allocator,
+            "GET",
+            httpUrl.str,
             httpUrl.getHostPortString(),
             "Connection: close\r\n",
         );
@@ -196,8 +196,7 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: Downl
     }
 
     {
-        const response = try readHttpResponse(options.allocator, stream.reader(),
-            std.math.min(4096, options.maxHttpResponseHeaders), options.maxHttpResponseHeaders);
+        const response = try readHttpResponse(options.allocator, stream.reader(), std.math.min(4096, options.maxHttpResponseHeaders), options.maxHttpResponseHeaders);
         defer options.allocator.free(response.buffer);
         const httpResponse = response.getHttpSlice();
         options.onHttpResponse(httpResponse);
@@ -210,9 +209,9 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: Downl
                     const location = (try http.parse.parseHeaderValue(headers, "Location")) orelse
                         return error.HttpRedirectNoLocation;
                     const locationCopy = try options.allocator.dupe(u8, location);
-                    return DownloadResult { .Redirect = locationCopy };
+                    return DownloadResult{ .Redirect = locationCopy };
                 }
-                std.debug.print("Non 200 status code: {d} {s}\n", .{status.code, status.getMsg(httpResponse)});
+                std.debug.print("Non 200 status code: {d} {s}\n", .{ status.code, status.getMsg(httpResponse) });
                 return error.HttpNon200StatusCode;
             }
         }

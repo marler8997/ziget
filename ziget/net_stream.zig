@@ -2,14 +2,14 @@ const std = @import("std");
 const ssl = @import("ssl");
 
 pub const NetStream = union(enum) {
-    File: *const std.fs.File,
+    Stream: *const std.net.Stream,
     Ssl: *ssl.SslConn,
 
     pub const Reader = std.io.Reader(*@This(), FnErrorSet(@TypeOf(read)), read);
     pub const Writer = std.io.Writer(*@This(), FnErrorSet(@TypeOf(write)), write);
 
-    pub fn initFile(file: *const std.fs.File) NetStream {
-        return .{ .File = file };
+    pub fn initStream(file: *const std.net.Stream) NetStream {
+        return .{ .Stream = file };
     }
     pub fn initSsl(conn: *ssl.SslConn) NetStream {
         return .{ .Ssl = conn };
@@ -25,15 +25,15 @@ pub const NetStream = union(enum) {
 
     pub fn read(self: *@This(), dest: []u8) !usize {
         switch (self.*) {
-            .File => |s| return s.read(dest),
-            .Ssl  => |s| return s.read(dest),
+            .Stream => |s| return s.read(dest),
+            .Ssl => |s| return s.read(dest),
         }
     }
 
     pub fn write(self: *@This(), bytes: []const u8) !usize {
         switch (self.*) {
-            .File => |s| return try s.write(bytes),
-            .Ssl  => |s| return try s.write(bytes),
+            .Stream => |s| return try s.write(bytes),
+            .Ssl => |s| return try s.write(bytes),
         }
     }
 };

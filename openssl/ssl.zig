@@ -5,7 +5,7 @@ const openssl = @cImport({
     @cInclude("openssl/err.h");
 });
 
-usingnamespace if (std.builtin.os.tag == .windows) struct { } else struct {
+usingnamespace if (std.builtin.os.tag == .windows) struct {} else struct {
     pub extern "c" var stderr: [*c]openssl.FILE;
 };
 
@@ -31,11 +31,9 @@ pub fn init() anyerror!void {
     //pub const OpenSSL_add_all_algorithms = @compileError("unable to translate C expr: expected identifier");
     //openssl.OpenSSL_add_all_algorithms();
     // NOTE: this should be roughly the same thing
-    if (1 != openssl.OPENSSL_init_crypto(
-                      openssl.OPENSSL_INIT_ADD_ALL_CIPHERS
-                    | openssl.OPENSSL_INIT_ADD_ALL_DIGESTS
-                    //| openssl.OPENSSL_INIT_LOAD_CONFIG
-                    , null)) {
+    if (1 != openssl.OPENSSL_init_crypto(openssl.OPENSSL_INIT_ADD_ALL_CIPHERS | openssl.OPENSSL_INIT_ADD_ALL_DIGESTS
+    //| openssl.OPENSSL_INIT_LOAD_CONFIG
+    , null)) {
         return error.OpensslInitCryptoFailed;
     }
 
@@ -44,14 +42,13 @@ pub fn init() anyerror!void {
     //openssl.SSL_load_error_strings();
 
     //openssl.OPENSSL_config(null);
-
 }
 
 pub const SslConn = struct {
     ctx: *openssl.SSL_CTX,
     ssl: *openssl.SSL,
 
-    pub fn init(file: std.fs.File, serverName: []const u8) !SslConn {
+    pub fn init(file: std.net.Stream, serverName: []const u8) !SslConn {
         //const method = openssl.TLSv1_2_client_method();
         //const method = openssl.SSLv3_method();
         //const method = openssl.TLS_method();
@@ -79,18 +76,17 @@ pub const SslConn = struct {
         // TEMPORARY HACK to get around the non-const
         // https://ziglang.org doesn't work without the servername being set
         // it sends back and alert with handshake_failure
-        var buf : [100]u8 = undefined;
+        var buf: [100]u8 = undefined;
         std.mem.copy(u8, &buf, serverName);
         buf[serverName.len] = 0;
-        const hostnameSlice : []u8 = &buf;
+        const hostnameSlice: []u8 = &buf;
         //if (1 != openssl.SSL_set_tlsext_host_name(ssl, hostnameSlice.ptr)) {
-        if (1 != openssl.SSL_ctrl(ssl, openssl.SSL_CTRL_SET_TLSEXT_HOSTNAME,
-            openssl.TLSEXT_NAMETYPE_host_name, hostnameSlice.ptr)) {
+        if (1 != openssl.SSL_ctrl(ssl, openssl.SSL_CTRL_SET_TLSEXT_HOSTNAME, openssl.TLSEXT_NAMETYPE_host_name, hostnameSlice.ptr)) {
             ERR_print_errors_fp();
             return error.OpensslSetHostNameFailed;
         }
 
-        if (1 != openssl.SSL_set_fd(ssl, fileToCHandle(file))) {
+        if (1 != openssl.SSL_set_fd(ssl, streamToCHandle(file))) {
             ERR_print_errors_fp();
             return error.OpensslSetFdFailed;
         }
@@ -103,7 +99,7 @@ pub const SslConn = struct {
             }
         }
 
-        return SslConn {
+        return SslConn{
             .ctx = ctx,
             .ssl = ssl,
         };
@@ -114,8 +110,8 @@ pub const SslConn = struct {
 
     //pub const ReadError = FnError(@TypeOf(readBoth));
     //pub const WriteError = FnError(@TypeOf(writeBoth));
-    pub const ReadError = error { };
-    pub const WriteError = error { };
+    pub const ReadError = error{};
+    pub const WriteError = error{};
     pub const Reader = std.io.Reader(*SslConn, ReadError, read);
     pub const Writer = std.io.Writer(*SslConn, WriteError, write);
 
@@ -128,7 +124,7 @@ pub const SslConn = struct {
     }
 
     pub fn read(self: *SslConn, data: []u8) !usize {
-        var readSize : usize = undefined;
+        var readSize: usize = undefined;
         const result = openssl.SSL_read_ex(self.ssl, data.ptr, data.len, &readSize);
         if (1 == result)
             return readSize;
@@ -147,29 +143,26 @@ pub const SslConn = struct {
             switch (err) {
                 openssl.SSL_ERROR_NONE => unreachable,
                 openssl.SSL_ERROR_ZERO_RETURN => unreachable,
-                openssl.SSL_ERROR_WANT_READ
-                ,openssl.SSL_ERROR_WANT_WRITE
-                ,openssl.SSL_ERROR_WANT_CONNECT
-                ,openssl.SSL_ERROR_WANT_ACCEPT
-                ,openssl.SSL_ERROR_WANT_X509_LOOKUP
-                ,openssl.SSL_ERROR_WANT_ASYNC
-                ,openssl.SSL_ERROR_WANT_ASYNC_JOB
-                ,openssl.SSL_ERROR_WANT_CLIENT_HELLO_CB
-                ,openssl.SSL_ERROR_SYSCALL
-                ,openssl.SSL_ERROR_SSL
-                    => std.debug.panic("SSL_write failed with {d}\n", .{err}),
-                else
-                    => std.debug.panic("SSL_write failed with {d}\n", .{err}),
+                openssl.SSL_ERROR_WANT_READ,
+                openssl.SSL_ERROR_WANT_WRITE,
+                openssl.SSL_ERROR_WANT_CONNECT,
+                openssl.SSL_ERROR_WANT_ACCEPT,
+                openssl.SSL_ERROR_WANT_X509_LOOKUP,
+                openssl.SSL_ERROR_WANT_ASYNC,
+                openssl.SSL_ERROR_WANT_ASYNC_JOB,
+                openssl.SSL_ERROR_WANT_CLIENT_HELLO_CB,
+                openssl.SSL_ERROR_SYSCALL,
+                openssl.SSL_ERROR_SSL,
+                => std.debug.panic("SSL_write failed with {d}\n", .{err}),
+                else => std.debug.panic("SSL_write failed with {d}\n", .{err}),
             }
         }
         return @intCast(usize, result);
     }
 };
 
-fn fileToCHandle(file: std.fs.File)
-    if (std.builtin.os.tag == .windows) c_int else std.os.fd_t {
-
+fn streamToCHandle(s: std.net.Stream) if (std.builtin.os.tag == .windows) c_int else std.os.socket_t {
     if (std.builtin.os.tag == .windows)
-        return @intCast(c_int, @ptrToInt(file.handle));
-    return file.handle;
+        return @intCast(c_int, @ptrToInt(s.handle));
+    return s.handle;
 }

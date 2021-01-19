@@ -5,10 +5,10 @@ pub fn init() anyerror!void {
 }
 
 pub const SslConn = struct {
-    pub fn init(file: std.fs.File, serverName: []const u8) !SslConn {
+    pub fn init(file: std.net.Stream, serverName: []const u8) !SslConn {
         return error.NoSslConfigured;
     }
-    pub fn deinit(self: SslConn) void { }
+    pub fn deinit(self: SslConn) void {}
     pub fn read(self: SslConn, data: []u8) !usize {
         @panic("nossl has been configured");
     }
