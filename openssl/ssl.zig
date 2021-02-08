@@ -51,7 +51,7 @@ pub const SslConn = struct {
     ctx: *openssl.SSL_CTX,
     ssl: *openssl.SSL,
 
-    pub fn init(file: std.fs.File, serverName: []const u8) !SslConn {
+    pub fn init(file: std.net.Stream, serverName: []const u8) !SslConn {
         //const method = openssl.TLSv1_2_client_method();
         //const method = openssl.SSLv3_method();
         //const method = openssl.TLS_method();
@@ -90,7 +90,7 @@ pub const SslConn = struct {
             return error.OpensslSetHostNameFailed;
         }
 
-        if (1 != openssl.SSL_set_fd(ssl, fileToCHandle(file))) {
+        if (1 != openssl.SSL_set_fd(ssl, streamToCHandle(file))) {
             ERR_print_errors_fp();
             return error.OpensslSetFdFailed;
         }
@@ -166,8 +166,8 @@ pub const SslConn = struct {
     }
 };
 
-fn fileToCHandle(file: std.fs.File)
-    if (std.builtin.os.tag == .windows) c_int else std.os.fd_t {
+fn streamToCHandle(file: std.net.Stream)
+    if (std.builtin.os.tag == .windows) c_int else std.os.socket_t {
 
     if (std.builtin.os.tag == .windows)
         return @intCast(c_int, @ptrToInt(file.handle));
