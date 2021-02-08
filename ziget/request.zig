@@ -176,7 +176,7 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: Downl
         // TODO: file.shutdown()???
         file.close();
     }
-    var stream = NetStream.initFile(&file);
+    var stream = NetStream.initStream(&file);
 
     var sslConn : ssl.SslConn = undefined;
     if (httpUrl.secure) {
