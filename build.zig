@@ -50,6 +50,15 @@ pub fn build(b: *Builder) !void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+
+    const test_exe = b.addExecutable("test", "test.zig");
+    test_exe.setTarget(target);
+    test_exe.setBuildMode(mode);
+    const test_run_cmd = test_exe.run();
+    test_run_cmd.step.dependOn(b.getInstallStep());
+    const test_step = b.step("test", "Test ziget");
+    test_step.dependOn(&test_run_cmd.step);
 }
 
 fn setupOpensslWindows(b: *Builder, exe: *std.build.LibExeObjStep) !void {
