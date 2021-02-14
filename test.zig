@@ -23,19 +23,56 @@ pub fn runGetOutputArray(allocator: *std.mem.Allocator, argv: []const []const u8
 }
 
 pub fn main() !u8 {
+    var nossl = false;
+    var openssl = false;
+    var iguana = false;
+
+    var args = try std.process.argsAlloc(std.heap.page_allocator);
+    args = args[1..];
+    if (args.len == 0) {
+        nossl = true;
+        openssl = true;
+        iguana = true;
+    } else if (args.len != 1) {
+        std.log.err("expected up to 1 command-line argument but got {}\n", .{args.len});
+        return 1;
+    } else {
+        const test_name = args[0];
+        if (std.mem.eql(u8, test_name, "nossl")) {
+            nossl = true;
+        } else if (std.mem.eql(u8, test_name, "openssl")) {
+            openssl = true;
+        } else if (std.mem.eql(u8, test_name, "iguana")) {
+            iguana = true;
+        } else {
+            std.log.err("unknown test '{s}'\n", .{test_name});
+            return 1;
+        }
+    }
+
     const zig = "zig";
-    const ziget = "." ++ sep ++ "zig-cache" ++ sep ++ "bin" ++ sep ++ "ziget";
+    const ziget = exeFile("." ++ sep ++ "zig-cache" ++ sep ++ "bin" ++ sep ++ "ziget");
 
-    const tests = [_]Test {
-        Test.init(&[_][]const u8 { zig, "build"}),
-        Test.init(&[_][]const u8 { ziget, "google.com"}),
-        Test.init(&[_][]const u8 { ziget, "http://google.com"}),
-        Test.init(&[_][]const u8 { zig, "build", "-Dopenssl"}),
-        Test.init(&[_][]const u8 { ziget, "http://google.com"}),
-        Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}),
-    };
+    var tests = std.ArrayList(Test).init(std.heap.page_allocator);
+    defer tests.deinit();
 
-    for (tests) |t| {
+    if (nossl) {
+        try tests.append(Test.init(&[_][]const u8 { zig, "build"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "google.com"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
+    }
+    if (openssl) {
+        try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Dopenssl"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
+    }
+    if (iguana) {
+        try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Diguana"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
+    }
+
+    for (tests.items) |t| {
         std.debug.print("[test] Executing '{s}'\n", .{t.cmd});
         const result = try runGetOutputArray(std.testing.allocator, t.cmd);
         if (result.stdout.len == 0) {
@@ -63,6 +100,11 @@ pub fn main() !u8 {
             else => return 1,
         }
     }
-    std.debug.print("[test] Sucess\n", .{});
+    std.debug.print("[test] Success\n", .{});
     return 0;
+}
+
+fn exeFile(comptime s: []const u8) []const u8 {
+    if (std.builtin.os.tag == .windows) return s ++ ".exe";
+    return s;
 }

@@ -48,10 +48,14 @@ pub fn init() anyerror!void {
 }
 
 pub const SslConn = struct {
+    // state that an SslConn uses that is "pinned" to a fixed address
+    // this has to be separate from SslConn until https://github.com/ziglang/zig/issues/7769 is implemented
+    pub const Pinned = struct {};
+
     ctx: *openssl.SSL_CTX,
     ssl: *openssl.SSL,
 
-    pub fn init(file: std.net.Stream, serverName: []const u8) !SslConn {
+    pub fn init(file: std.net.Stream, serverName: []const u8, pinned: *Pinned) !SslConn {
         //const method = openssl.TLSv1_2_client_method();
         //const method = openssl.SSLv3_method();
         //const method = openssl.TLS_method();

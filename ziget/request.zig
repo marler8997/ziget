@@ -178,9 +178,10 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: Downl
     }
     var stream = NetStream.initStream(&file);
 
+    var sslConnPinned : ssl.SslConn.Pinned = undefined;
     var sslConn : ssl.SslConn = undefined;
     if (httpUrl.secure) {
-        sslConn = try ssl.SslConn.init(file, httpUrl.getHostString());
+        sslConn = try ssl.SslConn.init(file, httpUrl.getHostString(), &sslConnPinned);
         stream = NetStream.initSsl(&sslConn);
     }
     defer { if (httpUrl.secure) sslConn.deinit(); }
