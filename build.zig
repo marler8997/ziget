@@ -10,6 +10,11 @@ fn unwrapOptionalBool(optionalBool: ?bool) bool {
 pub fn build(b: *Builder) !void {
     const openssl = unwrapOptionalBool(b.option(bool, "openssl", "enable OpenSSL ssl backend"));
     //const wolfssl = unwrapOptionalBool(b.option(bool, "wolfssl", "enable WolfSSL ssl backend"));
+    const iguana = unwrapOptionalBool(b.option(bool, "iguana", "enable IguanaTLS ssl backend"));
+    if (openssl and iguana) {
+        std.log.err("both '-Dopenssl' and '-Diguana' cannot be enabled at the same time", .{});
+        std.os.exit(1);
+    }
 
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -36,6 +41,17 @@ pub fn build(b: *Builder) !void {
             exe.linkSystemLibrary("crypto");
             exe.linkSystemLibrary("ssl");
         }
+    } else if (iguana) {
+        const iguana_index_file = try getPackageIndex(b.allocator,
+            "https://github.com/alexnask/iguanaTLS",
+            "src" ++ std.fs.path.sep_str ++ "main.zig");
+        exe.addPackage(Pkg {
+            .name = "ssl",
+            .path = "iguana/ssl.zig",
+            .dependencies = &[_]Pkg {
+                .{ .name = "iguana", .path = iguana_index_file },
+            },
+        });
     } else {
         exe.addPackage(Pkg { .name = "ssl", .path = "nossl/ssl.zig" });
     }
@@ -55,10 +71,28 @@ pub fn build(b: *Builder) !void {
     const test_exe = b.addExecutable("test", "test.zig");
     test_exe.setTarget(target);
     test_exe.setBuildMode(mode);
-    const test_run_cmd = test_exe.run();
-    test_run_cmd.step.dependOn(b.getInstallStep());
-    const test_step = b.step("test", "Test ziget");
-    test_step.dependOn(&test_run_cmd.step);
+
+    const test_all_run_cmd = test_exe.run();
+    const test_nossl_run_cmd = test_exe.run();
+    test_nossl_run_cmd.addArg("nossl");
+    const test_openssl_run_cmd = test_exe.run();
+    test_openssl_run_cmd.addArg("openssl");
+    const test_iguana_run_cmd = test_exe.run();
+    test_iguana_run_cmd.addArg("iguana");
+
+    test_all_run_cmd.step.dependOn(b.getInstallStep());
+    test_nossl_run_cmd.step.dependOn(b.getInstallStep());
+    test_openssl_run_cmd.step.dependOn(b.getInstallStep());
+    test_iguana_run_cmd.step.dependOn(b.getInstallStep());
+
+    const test_all_step = b.step("test-all", "Test ziget with all backends");
+    test_all_step.dependOn(&test_all_run_cmd.step);
+    const test_nossl_step = b.step("test-nossl", "Test ziget with the nossl backend");
+    test_nossl_step.dependOn(&test_nossl_run_cmd.step);
+    const test_openssl_step = b.step("test-openssl", "Test ziget with the openssl backend");
+    test_openssl_step.dependOn(&test_openssl_run_cmd.step);
+    const test_iguana_step = b.step("test-iguana", "Test ziget with the iguanaTLS backend");
+    test_iguana_step.dependOn(&test_iguana_run_cmd.step);
 }
 
 fn setupOpensslWindows(b: *Builder, exe: *std.build.LibExeObjStep) !void {
@@ -81,4 +115,28 @@ fn setupOpensslWindows(b: *Builder, exe: *std.build.LibExeObjStep) !void {
             ).step
         );
     }
+}
+
+fn getGitRepo(allocator: *std.mem.Allocator, url: []const u8) ![]const u8 {
+    const repo_path = init: {
+        const cwd = try std.process.getCwdAlloc(allocator);
+        defer allocator.free(cwd);
+        break :init try std.fs.path.join(allocator,
+            &[_][]const u8{ std.fs.path.dirname(cwd).?, std.fs.path.basename(url) }
+        );
+    };
+    errdefer allocator.free(repo_path);
+
+    std.fs.accessAbsolute(repo_path, std.fs.File.OpenFlags { .read = true }) catch |err| {
+        std.debug.print("Error: repository '{s}' does not exist\n", .{repo_path});
+        std.debug.print("       Run the following to clone it:\n", .{});
+        std.debug.print("       git clone {s} {s}\n", .{url, repo_path});
+        std.os.exit(1);
+    };
+    return repo_path;
+}
+fn getPackageIndex(allocator: *std.mem.Allocator, url: []const u8, index_sub_path: []const u8) ![]const u8 {
+    const repo_path = try getGitRepo(allocator, url);
+    defer allocator.free(repo_path);
+    return try std.fs.path.join(allocator, &[_][]const u8 { repo_path, index_sub_path });
 }

@@ -5,7 +5,11 @@ pub fn init() anyerror!void {
 }
 
 pub const SslConn = struct {
-    pub fn init(file: std.net.Stream, serverName: []const u8) !SslConn {
+    // state that an SslConn uses that is "pinned" to a fixed address
+    // this has to be separate from SslConn until https://github.com/ziglang/zig/issues/7769 is implemented
+    pub const Pinned = struct {};
+
+    pub fn init(file: std.net.Stream, serverName: []const u8, pinned: *Pinned) !SslConn {
         return error.NoSslConfigured;
     }
     pub fn deinit(self: SslConn) void { }
