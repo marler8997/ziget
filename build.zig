@@ -7,58 +7,102 @@ fn unwrapOptionalBool(optionalBool: ?bool) bool {
     return false;
 }
 
-pub fn build(b: *Builder) !void {
-    const openssl = unwrapOptionalBool(b.option(bool, "openssl", "enable OpenSSL ssl backend"));
-    //const wolfssl = unwrapOptionalBool(b.option(bool, "wolfssl", "enable WolfSSL ssl backend"));
-    const iguana = unwrapOptionalBool(b.option(bool, "iguana", "enable IguanaTLS ssl backend"));
-    if (openssl and iguana) {
-        std.log.err("both '-Dopenssl' and '-Diguana' cannot be enabled at the same time", .{});
+const SslBackend = enum {
+    nossl,
+    openssl,
+    wolfssl,
+    iguana,
+    schannel,
+};
+const ssl_backends = @typeInfo(SslBackend).Enum.fields;
+
+pub fn getSslBackend(b: *Builder) SslBackend {
+
+    var backend: SslBackend = SslBackend.nossl; // default to nossl
+
+    var backend_infos : [ssl_backends.len]struct {
+        enabled: bool,
+        name: []const u8,
+    } = undefined;
+    var backend_enabled_count: u32 = 0;
+    inline for (ssl_backends) |field, i| {
+        const enabled = unwrapOptionalBool(b.option(bool, field.name, "enable ssl backend: " ++ field.name));
+        if (enabled) {
+            backend = @field(SslBackend, field.name);
+            backend_enabled_count += 1;
+        }
+        backend_infos[i] = .{
+            .enabled = enabled,
+            .name = field.name,
+        };
+    }
+    if (backend_enabled_count > 1) {
+        std.log.err("only one ssl backend may be enabled, can't provide these options at the same time:", .{});
+        for (backend_infos) |info| {
+            if (info.enabled) {
+                std.log.err("    -D{s}", .{info.name});
+            }
+        }
         std.os.exit(1);
     }
+    return backend;
+}
 
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
+pub fn build(b: *Builder) !void {
+    const ssl_backend = getSslBackend(b);
+
     const target = b.standardTargetOptions(.{});
-
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("ziget", "ziget-cmdline.zig");
     exe.setTarget(target);
     exe.single_threaded = true;
     exe.setBuildMode(mode);
-    if (openssl) {
-        exe.addPackage(Pkg { .name = "ssl", .path = "openssl/ssl.zig" });
-        exe.linkSystemLibrary("c");
-        if (std.builtin.os.tag == .windows) {
-            exe.linkSystemLibrary("libcrypto");
-            exe.linkSystemLibrary("libssl");
-            try setupOpensslWindows(b, exe);
-        } else {
-            exe.linkSystemLibrary("crypto");
-            exe.linkSystemLibrary("ssl");
-        }
-    } else if (iguana) {
-        const iguana_index_file = try getPackageIndex(b.allocator,
-            "https://github.com/alexnask/iguanaTLS",
-            "src" ++ std.fs.path.sep_str ++ "main.zig");
-        exe.addPackage(Pkg {
-            .name = "ssl",
-            .path = "iguana/ssl.zig",
-            .dependencies = &[_]Pkg {
-                .{ .name = "iguana", .path = iguana_index_file },
-            },
-        });
-    } else {
-        exe.addPackage(Pkg { .name = "ssl", .path = "nossl/ssl.zig" });
+    switch (ssl_backend) {
+        .nossl => {
+            exe.addPackage(Pkg { .name = "ssl", .path = "nossl/ssl.zig" });
+        },
+        .openssl => {
+            exe.addPackage(Pkg { .name = "ssl", .path = "openssl/ssl.zig" });
+            exe.linkSystemLibrary("c");
+            if (std.builtin.os.tag == .windows) {
+                exe.linkSystemLibrary("libcrypto");
+                exe.linkSystemLibrary("libssl");
+                try setupOpensslWindows(b, exe);
+            } else {
+                exe.linkSystemLibrary("crypto");
+                exe.linkSystemLibrary("ssl");
+            }
+        },
+        .wolfssl => {
+            std.log.err("-Dwolfssl is not implemented", .{});
+            std.os.exit(1);
+        },
+        .iguana => {
+            const iguana_index_file = try getPackageIndex(b.allocator,
+                "https://github.com/alexnask/iguanaTLS",
+                "src" ++ std.fs.path.sep_str ++ "main.zig");
+            exe.addPackage(Pkg {
+                .name = "ssl",
+                .path = "iguana/ssl.zig",
+                .dependencies = &[_]Pkg {
+                    .{ .name = "iguana", .path = iguana_index_file },
+                },
+            });
+        },
+        .schannel => {
+            const zigwin32_index_file = try getPackageIndex(b.allocator,
+                "https://github.com/marlersoft/zigwin32",
+                "src" ++ std.fs.path.sep_str ++ "win32.zig");
+            exe.addPackage(Pkg {
+                .name = "ssl",
+                .path = "schannel/ssl.zig",
+                .dependencies = &[_]Pkg {
+                    .{ .name = "win32", .path = zigwin32_index_file },
+                },
+            });
+        },
     }
-    //if (wolfssl) {
-    //    std.debug.print("Error: -Dwolfssl=true not implemented", .{});
-    //    std.os.exit(1);
-    //}
     exe.install();
 
     const run_cmd = exe.run();
@@ -67,33 +111,40 @@ pub fn build(b: *Builder) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    addTests(b, target, mode);
+}
 
+fn addTests(b: *Builder, target: std.zig.CrossTarget, mode: std.builtin.Mode) void {
     const test_exe = b.addExecutable("test", "test.zig");
     test_exe.setTarget(target);
     test_exe.setBuildMode(mode);
 
-    const test_all_run_cmd = test_exe.run();
-    const test_nossl_run_cmd = test_exe.run();
-    test_nossl_run_cmd.addArg("nossl");
-    const test_openssl_run_cmd = test_exe.run();
-    test_openssl_run_cmd.addArg("openssl");
-    const test_iguana_run_cmd = test_exe.run();
-    test_iguana_run_cmd.addArg("iguana");
+    const test_step = b.step("test", "Run all the 'Enabled' tests");
 
-    test_all_run_cmd.step.dependOn(b.getInstallStep());
-    test_nossl_run_cmd.step.dependOn(b.getInstallStep());
-    test_openssl_run_cmd.step.dependOn(b.getInstallStep());
-    test_iguana_run_cmd.step.dependOn(b.getInstallStep());
+    var backend_tests : [ssl_backends.len]struct {
+        run_cmd: *std.build.RunStep,
+    } = undefined;
+    inline for (ssl_backends) |field, i| {
+        const enum_value = @field(SslBackend, field.name);
+        const enabled_by_default =
+            if (enum_value == .wolfssl) false
+            else if (enum_value == .schannel and std.builtin.os.tag != .windows) false
+            else true;
 
-    const test_all_step = b.step("test-all", "Test ziget with all backends");
-    test_all_step.dependOn(&test_all_run_cmd.step);
-    const test_nossl_step = b.step("test-nossl", "Test ziget with the nossl backend");
-    test_nossl_step.dependOn(&test_nossl_run_cmd.step);
-    const test_openssl_step = b.step("test-openssl", "Test ziget with the openssl backend");
-    test_openssl_step.dependOn(&test_openssl_run_cmd.step);
-    const test_iguana_step = b.step("test-iguana", "Test ziget with the iguanaTLS backend");
-    test_iguana_step.dependOn(&test_iguana_run_cmd.step);
+        backend_tests[i].run_cmd = test_exe.run();
+        backend_tests[i].run_cmd.addArg(field.name);
+        backend_tests[i].run_cmd.step.dependOn(b.getInstallStep());
+        const enabled_prefix = if (enabled_by_default) "Enabled " else "Disabled";
+        const test_backend_step = b.step("test-" ++ field.name,
+            enabled_prefix ++ ": test ziget with the '" ++ field.name ++ "' ssl backend");
+        test_backend_step.dependOn(&backend_tests[i].run_cmd.step);
+
+        if (enabled_by_default) {
+            test_step.dependOn(&backend_tests[i].run_cmd.step);
+        }
+    }
 }
+
 
 fn setupOpensslWindows(b: *Builder, exe: *std.build.LibExeObjStep) !void {
     const openssl_path = b.option([]const u8, "openssl-path", "path to openssl (for Windows)") orelse {
