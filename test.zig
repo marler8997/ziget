@@ -26,17 +26,16 @@ pub fn main() !u8 {
     var nossl = false;
     var openssl = false;
     var iguana = false;
+    var schannel = false;
 
     var args = try std.process.argsAlloc(std.heap.page_allocator);
     args = args[1..];
-    if (args.len == 0) {
-        nossl = true;
-        openssl = true;
-        iguana = true;
-    } else if (args.len != 1) {
-        std.log.err("expected up to 1 command-line argument but got {}\n", .{args.len});
+    if (args.len != 1) {
+        std.log.err("please provide a test to run\n", .{});
         return 1;
-    } else {
+    }
+
+    {
         const test_name = args[0];
         if (std.mem.eql(u8, test_name, "nossl")) {
             nossl = true;
@@ -44,6 +43,8 @@ pub fn main() !u8 {
             openssl = true;
         } else if (std.mem.eql(u8, test_name, "iguana")) {
             iguana = true;
+        } else if (std.mem.eql(u8, test_name, "schannel")) {
+            schannel = true;
         } else {
             std.log.err("unknown test '{s}'\n", .{test_name});
             return 1;
@@ -68,6 +69,11 @@ pub fn main() !u8 {
     }
     if (iguana) {
         try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Diguana"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
+    }
+    if (schannel) {
+        try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Dschannel"}));
         try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
         try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
     }
