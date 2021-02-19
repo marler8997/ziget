@@ -95,18 +95,18 @@ pub const SslConn = struct {
         var security_context : SecHandle = undefined;
 
         const allocator = std.heap.page_allocator;
-        var negotiate_buf: ?[]u8 = try allocator.allocFn(allocator, 4096, 1, 1, @returnAddress());
+        var negotiate_buf = try allocator.allocFn(allocator, 4096, 1, 1, @returnAddress());
         defer {
-            if (negotiate_buf) |buf| {
-                _ = allocator.resizeFn(allocator, buf, 1, 0, 1, @returnAddress()) catch unreachable;
+            if (negotiate_buf.len > 0) {
+                _ = allocator.resizeFn(allocator, negotiate_buf, 1, 0, 1, @returnAddress()) catch unreachable;
             }
         }
-        std.log.debug("[SCHANNEL] negotiate buffer size is {}\n", .{negotiate_buf.?.len});
+        std.log.debug("[SCHANNEL] negotiate buffer size is {}\n", .{negotiate_buf.len});
 
         var out_buf = SecBuffer {
-            .cbBuffer = @intCast(u32, negotiate_buf.?.len),
+            .cbBuffer = @intCast(u32, negotiate_buf.len),
             .BufferType = SECBUFFER_TOKEN,
-            .pvBuffer = negotiate_buf.?.ptr,
+            .pvBuffer = negotiate_buf.ptr,
         };
         var out_buf_desc = SecBufferDesc {
             .ulVersion = 0,
@@ -179,7 +179,7 @@ pub const SslConn = struct {
         };
 
         {
-            const token = negotiate_buf.?[0 .. out_buf.cbBuffer];
+            const token = negotiate_buf[0 .. out_buf.cbBuffer];
             std.log.debug("[SCHANNEL] token buffer {} bytes: 0x{x}", .{token.len, token});
             const written = try conn.write(token);
             std.debug.assert(written == token.len);
@@ -189,12 +189,12 @@ pub const SslConn = struct {
             while (need_continue) {
                 try conn.msg_reader.readLen();
                 const msg_len = conn.msg_reader.msg_left;
-                if (negotiate_buf.?.len < msg_len) {
-                    std.log.debug("[SCHANNEL] expanding buffer from {} to {}", .{negotiate_buf.?.len, msg_len});
+                if (negotiate_buf.len < msg_len) {
+                    std.log.debug("[SCHANNEL] expanding buffer from {} to {}", .{negotiate_buf.len, msg_len});
                     std.log.debug("0x{x}", .{msg_len});
                     try reallocNoPreserve(allocator, &negotiate_buf, 1, msg_len, 1, @returnAddress());
                 }
-                const msg = negotiate_buf.?[0..msg_len];
+                const msg = negotiate_buf[0..msg_len];
                 try conn.msg_reader.readCurrentMsgFull(msg);
 
                 std.log.err("need_continue not implemented", .{});
@@ -222,13 +222,13 @@ pub const SslConn = struct {
 };
 
 // TODO: move to std/mem/Allocator.zig
-fn reallocNoPreserve(allocator: *std.mem.Allocator, buf: *?[]u8, buf_align: u29, new_len: usize, len_align: u29, ret_addr: usize) std.mem.Allocator.Error!void {
-    std.debug.assert(new_len > buf.*.?.len);
-    buf.*.?.len = allocator.resizeFn(allocator, buf.*.?, buf_align, new_len, len_align, ret_addr) catch {
-        std.debug.assert(0 == allocator.resizeFn(allocator, buf.*.?, buf_align, 0, len_align, ret_addr) catch unreachable);
-        buf.* = null;
+fn reallocNoPreserve(allocator: *std.mem.Allocator, buf: *[]u8, buf_align: u29, new_len: usize, len_align: u29, ret_addr: usize) std.mem.Allocator.Error!void {
+    std.debug.assert(new_len > buf.*.len);
+    buf.*.len = allocator.resizeFn(allocator, buf.*, buf_align, new_len, len_align, ret_addr) catch {
+        std.debug.assert(0 == allocator.resizeFn(allocator, buf.*, buf_align, 0, len_align, ret_addr) catch unreachable);
+        buf.* = &[0]u8 {};
         buf.* = try allocator.allocFn(allocator, new_len, buf_align, len_align, ret_addr);
-        std.debug.assert(buf.*.?.len >= new_len);
+        std.debug.assert(buf.*.len >= new_len);
         return;
     };
 }
