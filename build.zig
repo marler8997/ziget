@@ -68,6 +68,7 @@ pub fn unwrapOptionalBool(optionalBool: ?bool) bool {
 pub const SslBackend = enum {
     openssl,
     wolfssl,
+    bearssl,
     iguana,
     schannel,
 };
@@ -129,6 +130,55 @@ pub fn addSslBackend(step: *std.build.LibExeObjStep, backend: SslBackend, ziget_
         .wolfssl => {
             std.log.err("-Dwolfssl is not implemented", .{});
             std.os.exit(1);
+        },
+        .bearssl => {
+            const bearssl_zig_bindings_index = try (GitRepo {
+                .url = "https://github.com/MasterQ32/zig-bearssl",
+                .branch = null,
+                .sha = "8ed096ca3caa2511add5b66ed3cabc21301931c8",
+            }).resolveOneFile(b.allocator, "src" ++ std.fs.path.sep_str ++ "lib.zig");
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            // The following line dereferences the characters in the bearssl_zig_bindings_index
+            // string to workaround some bug.  If this isn't done, then the sub_path part
+            // of that string is all 0xaa. TODO: minimize this and find and/or file the bug, link
+            // to it back here.
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            for (bearssl_zig_bindings_index) |_| { }
+
+            const bearssl_repo = try (GitRepo {
+                .url = "https://www.bearssl.org/git/BearSSL",
+                .branch = "v0.6",
+                .sha = "7d8e767e79bb1750345e571ec89cca1da13b52df",
+            }).resolve(b.allocator);
+
+            // NOTE: zig-bearssl provides code to add this stuff to the build, however,
+            //       we can't use it until we have @tryImport
+            //       see "linkBearSSL" in zig-bearssl/src/lib.zig
+            const bearssl_src = try std.fs.path.join(b.allocator, &[_][]const u8 { bearssl_repo, "src" });
+            step.addIncludeDir(try std.fs.path.join(b.allocator, &[_][]const u8 { bearssl_repo, "inc" }));
+            step.addIncludeDir(bearssl_src);
+            const cflags = &[_][]const u8 {
+                "-Wall",
+                "-DBR_LE_UNALIGNED=0", //  prevent BearSSL from using undefined behaviour when doing potential unaligned access
+            };
+            {
+                var sources = std.mem.split(@embedFile("bearssl/sources"), "\n");
+                while (sources.next()) |src| {
+                    if (src.len == 0) continue;
+                    // TODO: workaround what appears to be the same bug described above
+                    for (src) |_| { }
+                    //std.log.debug("BearSSL source '{s}'", .{src});
+                    step.addCSourceFile(try std.fs.path.join(b.allocator, &[_][]const u8{ bearssl_src, src }), cflags);
+                }
+            }
+            step.linkLibC();
+            return Pkg {
+                .name = "ssl",
+                .path = try std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "bearssl", "ssl.zig" }),
+                .dependencies = &[_]Pkg {
+                    .{ .name = "bearssl", .path = bearssl_zig_bindings_index },
+                },
+            };
         },
         .iguana => {
             const iguana_index_file = try (GitRepo {

@@ -26,6 +26,7 @@ pub fn main() !u8 {
     var nossl = false;
     var openssl = false;
     var iguana = false;
+    var bearssl = false;
     var schannel = false;
 
     var args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -43,6 +44,8 @@ pub fn main() !u8 {
             openssl = true;
         } else if (std.mem.eql(u8, test_name, "iguana")) {
             iguana = true;
+        } else if (std.mem.eql(u8, test_name, "bearssl")) {
+            bearssl = true;
         } else if (std.mem.eql(u8, test_name, "schannel")) {
             schannel = true;
         } else {
@@ -69,6 +72,11 @@ pub fn main() !u8 {
     }
     if (iguana) {
         try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Diguana"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
+    }
+    if (bearssl) {
+        try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Dbearssl"}));
         try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
         try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
     }
