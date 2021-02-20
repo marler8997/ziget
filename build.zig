@@ -206,17 +206,17 @@ pub fn setupOpensslWindows(step: *std.build.LibExeObjStep) !void {
     }
 }
 
-pub fn defaultReposDir(allocator: *std.mem.Allocator) ![]const u8 {
-    const cwd = try std.process.getCwdAlloc(allocator);
-    defer allocator.free(cwd);
-    return try std.fs.path.join(allocator, &[_][]const u8 { cwd, "dep" });
-}
-
 pub const GitRepo = struct {
     url: []const u8,
     branch: ?[]const u8,
     sha: []const u8,
     path: ?[]const u8 = null,
+
+    pub fn defaultReposDir(allocator: *std.mem.Allocator) ![]const u8 {
+        const cwd = try std.process.getCwdAlloc(allocator);
+        defer allocator.free(cwd);
+        return try std.fs.path.join(allocator, &[_][]const u8 { cwd, "dep" });
+    }
 
     pub fn resolve(self: GitRepo, allocator: *std.mem.Allocator) ![]const u8 {
         var optional_repos_dir_to_clean: ?[]const u8 = null;
@@ -237,7 +237,7 @@ pub const GitRepo = struct {
             std.debug.print("Error: repository '{s}' does not exist\n", .{path});
             std.debug.print("       Run the following to clone it:\n", .{});
             const branch_args = if (self.branch) |b| &[2][]const u8 {" -b ", b} else &[2][]const u8 {"", ""};
-            std.debug.print("       git clone {s}{s}{s} {s} && git -C {3s} checkout {s} -b for_zigup\n",
+            std.debug.print("       git clone {s}{s}{s} {s} && git -C {3s} checkout {s} -b for_ziget\n",
                 .{self.url, branch_args[0], branch_args[1], path, self.sha});
             std.os.exit(1);
         };
