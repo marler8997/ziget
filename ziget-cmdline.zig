@@ -3,6 +3,12 @@ const std = @import("std");
 const ziget = @import("./ziget.zig");
 const ssl = @import("ssl");
 
+// disable debug logging by default
+pub const log_level = switch (std.builtin.mode) {
+    .Debug => .info,
+    else => std.log.default_level,
+};
+
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = &arena.allocator;
 

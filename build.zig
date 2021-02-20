@@ -101,6 +101,22 @@ pub fn build(b: *Builder) !void {
                     .{ .name = "win32", .path = zigwin32_index_file },
                 },
             });
+            // NOTE: for now I'm using msspi from https://github.com/deemru/msspi
+            //       I'll probably port this to Zig at some point
+            //       Once I do remove this build config
+            // NOTE: I tested using this commit: 7338760a4a2c6fb80c47b24a2abba32d5fc40635 tagged at version 0.1.42
+            const msspi_repo = try getGitRepo(b.allocator, "https://github.com/deemru/msspi");
+            const msspi_src_dir = try std.fs.path.join(b.allocator, &[_][]const u8 { msspi_repo, "src" });
+            const msspi_main_cpp = try std.fs.path.join(b.allocator, &[_][]const u8 { msspi_src_dir, "msspi.cpp" });
+            const msspi_third_party_include = try std.fs.path.join(b.allocator, &[_][]const u8 { msspi_repo, "third_party", "cprocsp", "include" });
+            std.log.debug("main_cpp is '{s}'\n", .{msspi_main_cpp});
+            exe.addCSourceFile(msspi_main_cpp, &[_][]const u8 { });
+            exe.addIncludeDir(msspi_src_dir);
+            exe.addIncludeDir(msspi_third_party_include);
+            exe.linkLibC();
+            exe.linkSystemLibrary("ws2_32");
+            exe.linkSystemLibrary("crypt32");
+            exe.linkSystemLibrary("advapi32");
         },
     }
     exe.install();
