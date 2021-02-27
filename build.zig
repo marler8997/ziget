@@ -310,7 +310,7 @@ pub const GitRepo = struct {
             optional_repos_dir_to_clean = repos_dir;
             break :blk try std.fs.path.join(allocator, &[_][]const u8{ repos_dir, std.fs.path.basename(self.url) });
         };
-        errdefer self.allocator.free(path);
+        errdefer allocator.free(path);
 
         std.fs.accessAbsolute(path, std.fs.File.OpenFlags { .read = true }) catch |err| {
             std.debug.print("Error: repository '{s}' does not exist\n", .{path});
