@@ -6,7 +6,7 @@ const openssl = @cImport({
 });
 
 usingnamespace if (std.builtin.os.tag == .windows) struct { } else struct {
-    pub extern "c" var stderr: [*c]openssl.FILE;
+    pub extern "c" var stderr: *openssl.FILE;
 };
 
 fn ERR_print_errors_fp() void {
