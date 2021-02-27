@@ -67,6 +67,7 @@ pub fn unwrapOptionalBool(optionalBool: ?bool) bool {
 
 pub const SslBackend = enum {
     openssl,
+    opensslstatic,
     wolfssl,
     iguana,
     schannel,
@@ -121,6 +122,86 @@ pub fn addSslBackend(step: *std.build.LibExeObjStep, backend: SslBackend, ziget_
                 step.linkSystemLibrary("crypto");
                 step.linkSystemLibrary("ssl");
             }
+            return Pkg {
+                .name = "ssl",
+                .path = try std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl/ssl.zig" }),
+            };
+        },
+        .opensslstatic => {
+            const openssl_repo = try (GitRepo {
+                .url = "https://github.com/openssl/openssl",
+                .branch = "OpenSSL_1_1_1j",
+                .sha = "52c587d60be67c337364b830dd3fdc15404a2f04",
+            }).resolve(b.allocator);
+
+            // TODO: should we implement something to cache the configuration?
+            //       can the configure output be in a different directory?
+            {
+                const configure_openssl = std.build.RunStep.create(b, "configure openssl");
+                configure_openssl.cwd = openssl_repo;
+                configure_openssl.addArgs(&[_][]const u8 {
+                    "./config",
+                    // just a temporary path for now
+                    //"--openssl",
+                    //"/tmp/ziget-openssl-static-dir1",
+                    "-static",
+                    // just disable everything for now
+                    "no-threads",
+                    "no-shared",
+                    "no-asm",
+                    "no-sse2",
+                    "no-aria",
+                    "no-bf",
+                    "no-camellia",
+                    "no-cast",
+                    "no-des",
+                    "no-dh",
+                    "no-dsa",
+                    "no-ec",
+                    "no-idea",
+                    "no-md2",
+                    "no-mdc2",
+                    "no-rc2",
+                    "no-rc4",
+                    "no-rc5",
+                    "no-seed",
+                    "no-sm2",
+                    "no-sm3",
+                    "no-sm4",
+                });
+                configure_openssl.stdout_action = .{
+                    .expect_matches = &[_][]const u8 { "OpenSSL has been successfully configured" },
+                };
+                const make_openssl = std.build.RunStep.create(b, "configure openssl");
+                make_openssl.cwd = openssl_repo;
+                make_openssl.addArgs(&[_][]const u8 {
+                    "make",
+                    "include/openssl/opensslconf.h",
+                    "include/crypto/bn_conf.h",
+                    "include/crypto/dso_conf.h",
+                });
+                make_openssl.step.dependOn(&configure_openssl.step);
+                step.step.dependOn(&make_openssl.step);
+            }
+            step.addIncludeDir(openssl_repo);
+            step.addIncludeDir(try std.fs.path.join(b.allocator, &[_][]const u8 { openssl_repo, "include" }));
+            step.addIncludeDir(try std.fs.path.join(b.allocator, &[_][]const u8 { openssl_repo, "crypto", "modes" }));
+            const cflags = &[_][]const u8 {
+                "-Wall",
+                // TODO: is this the right way to do this? is it a config option?
+                "-DOPENSSL_NO_ENGINE",
+                // TODO: --openssldir doesn't seem to be setting this?
+                "-DOPENSSLDIR=\"/tmp/ziget-openssl-static-dir2\"",
+            };
+            {
+                const sources = @embedFile("openssl/sources");
+                var source_lines = std.mem.split(sources, "\n");
+                while (source_lines.next()) |src| {
+                    if (src.len == 0 or src[0] == '#') continue;
+                    step.addCSourceFile(try std.fs.path.join(b.allocator, &[_][]const u8 { openssl_repo, src }), cflags);
+                }
+            }
+            step.linkLibC();
             return Pkg {
                 .name = "ssl",
                 .path = try std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl/ssl.zig" }),

@@ -25,6 +25,7 @@ pub fn runGetOutputArray(allocator: *std.mem.Allocator, argv: []const []const u8
 pub fn main() !u8 {
     var nossl = false;
     var openssl = false;
+    var opensslstatic = false;
     var iguana = false;
     var schannel = false;
 
@@ -41,6 +42,8 @@ pub fn main() !u8 {
             nossl = true;
         } else if (std.mem.eql(u8, test_name, "openssl")) {
             openssl = true;
+        } else if (std.mem.eql(u8, test_name, "opensslstatic")) {
+            opensslstatic = true;
         } else if (std.mem.eql(u8, test_name, "iguana")) {
             iguana = true;
         } else if (std.mem.eql(u8, test_name, "schannel")) {
@@ -64,6 +67,11 @@ pub fn main() !u8 {
     }
     if (openssl) {
         try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Dopenssl"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
+        try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
+    }
+    if (opensslstatic) {
+        try tests.append(Test.init(&[_][]const u8 { zig, "build", "-Dopensslstatic"}));
         try tests.append(Test.init(&[_][]const u8 { ziget, "http://google.com"}));
         try tests.append(Test.init(&[_][]const u8 { ziget, "http://ziglang.org"}));
     }
