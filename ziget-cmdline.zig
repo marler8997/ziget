@@ -23,6 +23,7 @@ fn usage() void {
       \\  --out <file>         download to given file instead of url basename
       \\  --stdout             download to stdout
       \\  --max-redirs <num>   maximum number of redirects, default is 50
+      \\
       , .{});
 }
 
