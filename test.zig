@@ -55,7 +55,7 @@ pub fn main() !u8 {
     }
 
     const zig = "zig";
-    const ziget = exeFile("." ++ sep ++ "zig-cache" ++ sep ++ "bin" ++ sep ++ "ziget");
+    const ziget = exeFile("." ++ sep ++ "zig-out" ++ sep ++ "bin" ++ sep ++ "ziget");
 
     var tests = std.ArrayList(Test).init(std.heap.page_allocator);
     defer tests.deinit();
