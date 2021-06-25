@@ -68,7 +68,7 @@ pub fn download(url: Url, writer: anytype, options: DownloadOptions, state: *Dow
         const result = switch (nextUrl) {
             .None => @panic("no scheme not implemented"),
             .Unknown => return error.UnknownUrlScheme,
-            .Http => |httpUrl| try downloadHttpOrRedirect(httpUrl, writer, options, state),
+            .Http => |httpUrl| try downloadHttpOrRedirect(httpUrl, writer, options),
         };
         switch (result) {
             .Success => return,
@@ -170,7 +170,7 @@ pub fn forward(buffer: []u8, reader: anytype, writer: anytype) !void {
     }
 }
 
-pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: DownloadOptions, state: *DownloadState) !DownloadResult {
+pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: DownloadOptions) !DownloadResult {
     const file = try net.tcpConnectToHost(options.allocator, httpUrl.getHostString(), httpUrl.getPortOrDefault());
     defer {
         // TODO: file.shutdown()???

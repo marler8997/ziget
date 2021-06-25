@@ -101,7 +101,7 @@ pub fn main() anyerror!u8 {
     const outFile = initOutFile: {
         const outFilename = initOutFilename: {
             if (downloadToStdout) {
-                if (outFilenameOption) |name| {
+                if (outFilenameOption) |_| {
                     printError("cannot specify both --stdout and --out", .{});
                     return 1;
                 }

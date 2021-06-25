@@ -60,7 +60,7 @@ pub const Url = union(enum) {
 
     pub fn schemeString(self: @This()) []const u8 {
         return switch (self) {
-            .None => |u| "",
+            .None => "",
             .Unknown => |u| u.str[0..ptrIndexOf(u8, u.str, ':')],
             .Http => |u| if (u.secure) "https" else "http",
         };
@@ -138,7 +138,6 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
             std.debug.assert(ptr[0] == ':');
             ptr += 1;
             if (ptr == limit) return error.UrlEndedAtPortColon;
-            var portStart = ptr;
             var port32 : u32 = 0;
             while (true) {
                 ptr += 1;
