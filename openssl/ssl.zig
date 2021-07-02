@@ -56,6 +56,8 @@ pub const SslConn = struct {
     ssl: *openssl.SSL,
 
     pub fn init(file: std.net.Stream, serverName: []const u8, pinned: *Pinned) !SslConn {
+        _ = pinned;
+
         //const method = openssl.TLSv1_2_client_method();
         //const method = openssl.SSLv3_method();
         //const method = openssl.TLS_method();
