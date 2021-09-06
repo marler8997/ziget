@@ -88,12 +88,6 @@ pub fn eqlPtr(comptime T: type, a: [*]const T, b: [*]const T, len: usize) bool {
 }
 
 
-fn startsWith(ptr: [*]const u8, needle: []const u8) bool {
-    return (@ptrToInt(limit) - @ptrToInt(ptr) >= needle.len) and
-        std.mem.startsWith(u8, ptr, needle);
-}
-
-
 fn matchSkip(ptrRef: *[*]const u8, limit: [*]const u8, needle: []const u8) bool {
     if ( (@ptrToInt(limit) - @ptrToInt(ptrRef.*) >= needle.len) and
         eqlPtr(u8, ptrRef.*, needle.ptr, needle.len)

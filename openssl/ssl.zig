@@ -5,7 +5,7 @@ const openssl = @cImport({
     @cInclude("openssl/err.h");
 });
 
-usingnamespace if (std.builtin.os.tag == .windows) struct { } else struct {
+const c = if (std.builtin.os.tag == .windows) struct { } else struct {
     pub extern "c" var stderr: *openssl.FILE;
 };
 
@@ -15,7 +15,7 @@ fn ERR_print_errors_fp() void {
         std.debug.print("windows openssl error, unable to print it yet\n", .{});
         return;
     }
-    openssl.ERR_print_errors_fp(stderr);
+    openssl.ERR_print_errors_fp(c.stderr);
 }
 
 pub fn init() anyerror!void {
