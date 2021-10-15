@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const sep = std.fs.path.sep_str;
 
 const Test = struct {
@@ -119,6 +120,6 @@ pub fn main() !u8 {
 }
 
 fn exeFile(comptime s: []const u8) []const u8 {
-    if (std.builtin.os.tag == .windows) return s ++ ".exe";
+    if (builtin.os.tag == .windows) return s ++ ".exe";
     return s;
 }

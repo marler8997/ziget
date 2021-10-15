@@ -1,17 +1,18 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const openssl = @cImport({
     @cInclude("openssl/ssl.h");
     @cInclude("openssl/err.h");
 });
 
-const c = if (std.builtin.os.tag == .windows) struct { } else struct {
+const c = if (builtin.os.tag == .windows) struct { } else struct {
     pub extern "c" var stderr: *openssl.FILE;
 };
 
 fn ERR_print_errors_fp() void {
     // windows doesn't have `stderr`, so not sure what to do here yet
-    if (std.builtin.os.tag == .windows) {
+    if (builtin.os.tag == .windows) {
         std.debug.print("windows openssl error, unable to print it yet\n", .{});
         return;
     }
@@ -173,9 +174,9 @@ pub const SslConn = struct {
 };
 
 fn streamToCHandle(file: std.net.Stream)
-    if (std.builtin.os.tag == .windows) c_int else std.os.socket_t {
+    if (builtin.os.tag == .windows) c_int else std.os.socket_t {
 
-    if (std.builtin.os.tag == .windows)
+    if (builtin.os.tag == .windows)
         return @intCast(c_int, @ptrToInt(file.handle));
     return file.handle;
 }
