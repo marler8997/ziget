@@ -37,16 +37,30 @@ fn addTests(b: *Builder) void {
     const test_step = b.step("test", "Run all the 'Enabled' tests");
     inline for (ssl_backends) |field| {
         const enum_value = @field(SslBackend, field.name);
-        const enabled_by_default =
-            if (enum_value == .wolfssl) false
-            else if (enum_value == .schannel and builtin.os.tag != .windows) false
-            else true;
+        const enabled_by_default = switch (enum_value) {
+            .iguana => true,
+            .wolfssl => false, // wolfssl not supported yet
+            .schannel => false, // schannel not supported yet
+            .opensslstatic => (
+                   builtin.os.tag == .linux
+                // or builtin.os.tag == .macos (not working yet, I think config is not working)
+            ),
+            .openssl => (
+                   builtin.os.tag == .linux
+                // or builtin.os.tag == .macos (not working yet, not sure why)
+            ),
+        };
         addTest(b, test_step, field.name, enabled_by_default);
     }
     addTest(b, test_step, "nossl", true);
 }
 
-fn addTest(b: *Builder, default_test_step: *std.build.Step, comptime backend_name: []const u8, comptime enabled_by_default: bool) void {
+fn addTest(
+    b: *Builder,
+    default_test_step: *std.build.Step,
+    comptime backend_name: []const u8,
+    enabled_by_default: bool,
+) void {
     const prefix = b.pathFromRoot("zig-out" ++ std.fs.path.sep_str ++ backend_name);
     const nossl = std.mem.eql(u8, backend_name, "nossl");
     const build_backend = b.addSystemCommand(&[_][]const u8 {
@@ -327,9 +341,29 @@ pub fn addSslBackend(step: *std.build.LibExeObjStep, backend: SslBackend, ziget_
     }
 }
 
+const OpensslPathOption = struct {
+    // NOTE: I can't use ??[]const u8 because it exposes a bug in the compiler
+    is_cached: bool = false,
+    cached: ?[]const u8 = undefined,
+    fn get(self: *OpensslPathOption, b: *std.build.Builder) ?[]const u8 {
+        if (!self.is_cached) {
+            self.cached = b.option(
+                []const u8,
+                "openssl-path",
+                "path to openssl (for Windows)",
+            );
+            self.is_cached = true;
+        }
+        std.debug.assert(self.is_cached);
+        return self.cached;
+    }
+};
+var global_openssl_path_option = OpensslPathOption { };
+
 pub fn setupOpensslWindows(step: *std.build.LibExeObjStep) !void {
     const b = step.builder;
-    const openssl_path = b.option([]const u8, "openssl-path", "path to openssl (for Windows)") orelse {
+
+    const openssl_path = global_openssl_path_option.get(b) orelse {
         std.debug.print("Error: -Dopenssl on windows requires -Dopenssl-path=DIR to be specified\n", .{});
         std.os.exit(1);
     };
