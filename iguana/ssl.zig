@@ -36,7 +36,7 @@ pub const SslConn = struct {
 
         return SslConn {
             .client = try iguana.client_connect(.{
-                .rand = &pinned.rand.random,
+                .rand = pinned.rand.random(),
                 .reader = file.reader(),
                 .writer = file.writer(),
                 .temp_allocator = &pinned.arena.allocator,
