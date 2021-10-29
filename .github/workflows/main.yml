@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.9.0-dev.1524+d2f9646d9
+      - run: |
+          zig build test -Dfetch
+          zig build -Diguana
+        shell: bash
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ziget ${{ matrix.os }}
+          path: zig-out/bin/*
