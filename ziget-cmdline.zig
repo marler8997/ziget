@@ -1,8 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const ziget = @import("./ziget.zig");
-const ssl = @import("ssl");
+const ziget = @import("ziget");
 
 // disable debug logging by default
 pub const log_level = switch (builtin.mode) {
@@ -79,7 +78,7 @@ pub fn main() anyerror!u8 {
     }
 
     if (builtin.os.tag == .windows) _ = try std.os.windows.WSAStartup(2, 2);
-    try ssl.init();
+    try ziget.ssl.init();
 
     var urlString : []const u8 = args[0];
 
