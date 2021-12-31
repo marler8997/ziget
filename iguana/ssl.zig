@@ -1,8 +1,7 @@
 const std = @import("std");
 const iguana = @import("iguana");
 
-pub fn init() anyerror!void {
-}
+pub fn init() anyerror!void {}
 
 const Client = iguana.Client(
     std.net.Stream.Reader,
@@ -18,7 +17,7 @@ pub const SslConn = struct {
         rand: std.rand.DefaultCsprng,
         arena: std.heap.ArenaAllocator,
     };
-    
+
     client: Client,
 
     pub fn init(file: std.net.Stream, serverName: []const u8, pinned: *Pinned) !SslConn {
@@ -34,12 +33,12 @@ pub const SslConn = struct {
         };
         pinned.arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-        return SslConn {
+        return SslConn{
             .client = try iguana.client_connect(.{
                 .rand = pinned.rand.random(),
                 .reader = file.reader(),
                 .writer = file.writer(),
-                .temp_allocator = &pinned.arena.allocator,
+                .temp_allocator = pinned.arena.allocator(),
                 .cert_verifier = .none,
                 // TODO: do I need to add protocols here?  what does that do?
                 //.protocols = &[_][]const u8{"http/1.1"},

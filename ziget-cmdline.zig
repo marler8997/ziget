@@ -10,21 +10,21 @@ pub const log_level = switch (builtin.mode) {
 };
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-const allocator = &arena.allocator;
+const allocator = arena.allocator();
 
 fn printError(comptime fmt: []const u8, args: anytype) void {
-  std.debug.print("Error: " ++ fmt ++ "\n", args);
+    std.debug.print("Error: " ++ fmt ++ "\n", args);
 }
 
 fn usage() void {
     std.debug.print(
-      \\Usage: ziget [-options] <url>
-      \\Options:
-      \\  --out <file>         download to given file instead of url basename
-      \\  --stdout             download to stdout
-      \\  --max-redirs <num>   maximum number of redirects, default is 50
-      \\
-      , .{});
+        \\Usage: ziget [-options] <url>
+        \\Options:
+        \\  --out <file>         download to given file instead of url basename
+        \\  --stdout             download to stdout
+        \\  --max-redirs <num>   maximum number of redirects, default is 50
+        \\
+    , .{});
 }
 
 fn getArgOption(args: [][]const u8, i: *usize) []const u8 {
@@ -39,18 +39,18 @@ fn getArgOption(args: [][]const u8, i: *usize) []const u8 {
 pub fn main() anyerror!u8 {
     var args = try std.process.argsAlloc(allocator);
     if (args.len <= 1) {
-      usage();
-      return 1; // error exit code
+        usage();
+        return 1; // error exit code
     }
     args = args[1..];
 
-    var outFilenameOption : ?[]const u8 = null;
+    var outFilenameOption: ?[]const u8 = null;
     var downloadToStdout = false;
-    var maxRedirects : u16 = 50;
+    var maxRedirects: u16 = 50;
     {
-        var newArgsLength : usize = 0;
+        var newArgsLength: usize = 0;
         defer args.len = newArgsLength;
-        var i : usize = 0;
+        var i: usize = 0;
         while (i < args.len) : (i += 1) {
             var arg = args[i];
             if (!std.mem.startsWith(u8, arg, "-")) {
@@ -80,7 +80,7 @@ pub fn main() anyerror!u8 {
     if (builtin.os.tag == .windows) _ = try std.os.windows.WSAStartup(2, 2);
     try ziget.ssl.init();
 
-    var urlString : []const u8 = args[0];
+    var urlString: []const u8 = args[0];
 
     // default to http if no scheme provided
     if (std.mem.indexOf(u8, urlString, "://") == null) {
@@ -88,7 +88,7 @@ pub fn main() anyerror!u8 {
     }
 
     const url = try ziget.url.parseUrl(urlString);
-    const options = ziget.request.DownloadOptions {
+    const options = ziget.request.DownloadOptions{
         .flags = 0,
         .allocator = allocator,
         .maxRedirects = maxRedirects,
