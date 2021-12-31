@@ -53,7 +53,7 @@ fn getEnabledByDefault(optional_ssl_backend: ?SslBackend) bool {
 
 fn addExe(
     b: *Builder,
-    target: std.build.Target,
+    target: std.zig.CrossTarget,
     mode: std.builtin.Mode,
     comptime optional_ssl_backend: ?SslBackend,
     build_all_step: *std.build.Step,
@@ -264,7 +264,7 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             const iguana_repo = GitRepoStep.create(b, .{
                 .url = "https://github.com/marler8997/iguanaTLS",
                 .branch = null,
-                .sha = "f997c1085470f2414a4bbc50ea170e1da82058ab",
+                .sha = "2b37c575b3df76a4ee040b5a72a4fc277ed4057b",
             });
             lib_exe_obj.step.dependOn(&iguana_repo.step);
             const iguana_repo_path = iguana_repo.getPath(&lib_exe_obj.step);

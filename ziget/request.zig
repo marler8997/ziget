@@ -28,7 +28,7 @@ pub const DownloadOptions = struct {
         //pub const bufferIsMaxHttpResponse : u8 = 0x02;
     };
     flags: u8,
-    allocator: *Allocator,
+    allocator: Allocator,
     maxRedirects: u32,
     forwardBufferSize: u32,
     maxHttpResponseHeaders: u32,
@@ -51,7 +51,7 @@ pub const DownloadState = struct {
     }
 };
 
-fn optionalFree(allocator: *Allocator, comptime T: type, optionalBuf: ?[]T) void {
+fn optionalFree(allocator: Allocator, comptime T: type, optionalBuf: ?[]T) void {
     if (optionalBuf) |buf| {
         allocator.free(buf);
     }
@@ -98,7 +98,7 @@ pub fn download(url: Url, writer: anytype, options: DownloadOptions, state: *Dow
 //    }
 //}
 
-pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8, host: []const u8,headers: []const u8) ![]const u8 {
+pub fn httpAlloc(allocator: Allocator, method: []const u8, resource: []const u8, host: []const u8,headers: []const u8) ![]const u8 {
     return try std.fmt.allocPrint(allocator,
            "{s} {s} HTTP/1.1\r\n"
         ++ "Host: {s}\r\n"
@@ -107,7 +107,7 @@ pub fn httpAlloc(allocator: *Allocator, method: []const u8, resource: []const u8
         method, resource, host, headers});
 }
 
-//pub fn sendHttpGet(allocator: *Allocator, writer: anytype, httpUrl: Url.Http, keepAlive: bool) !void {
+//pub fn sendHttpGet(allocator: Allocator, writer: anytype, httpUrl: Url.Http, keepAlive: bool) !void {
 //    const request = try httpAlloc(allocator, "GET", httpUrl.str,
 //        httpUrl.getHostPortString(),
 //        if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n"
@@ -135,7 +135,7 @@ const HttpResponse = struct {
         return self.buffer[self.httpLimit..self.dataLimit];
     }
 };
-pub fn readHttpResponse(allocator: *Allocator, reader: anytype, initialBufferLen: usize, maxBufferLen: usize) !HttpResponse {
+pub fn readHttpResponse(allocator: Allocator, reader: anytype, initialBufferLen: usize, maxBufferLen: usize) !HttpResponse {
     var buffer = try allocator.alloc(u8, initialBufferLen);
     errdefer allocator.free(buffer);
 

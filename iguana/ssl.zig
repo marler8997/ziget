@@ -39,7 +39,7 @@ pub const SslConn = struct {
                 .rand = pinned.rand.random(),
                 .reader = file.reader(),
                 .writer = file.writer(),
-                .temp_allocator = &pinned.arena.allocator,
+                .temp_allocator = pinned.arena.allocator(),
                 .cert_verifier = .none,
                 // TODO: do I need to add protocols here?  what does that do?
                 //.protocols = &[_][]const u8{"http/1.1"},

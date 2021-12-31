@@ -10,7 +10,7 @@ pub const log_level = switch (builtin.mode) {
 };
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-const allocator = &arena.allocator;
+const allocator = arena.allocator();
 
 fn printError(comptime fmt: []const u8, args: anytype) void {
   std.debug.print("Error: " ++ fmt ++ "\n", args);
