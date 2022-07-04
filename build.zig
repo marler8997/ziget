@@ -148,10 +148,10 @@ pub fn addZigetPkg(
     const b = lib_exe_obj.builder;
     const ziget_index = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "ziget.zig" }) catch unreachable;
     const ssl_pkg = if (optional_ssl_backend) |backend| addSslBackend(lib_exe_obj, backend, ziget_repo)
-        else Pkg{ .name = "ssl", .path = .{ .path = "nossl/ssl.zig" } };
+        else Pkg{ .name = "ssl", .source = .{ .path = "nossl/ssl.zig" } };
     lib_exe_obj.addPackage(Pkg {
         .name = "ziget",
-        .path = .{ .path = ziget_index },
+        .source = .{ .path = ziget_index },
         .dependencies = &[_]Pkg {ssl_pkg},
     });
 }
@@ -171,7 +171,7 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             }
             return Pkg{
                 .name = "ssl",
-                .path = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl", "ssl.zig" }) catch unreachable}
+                .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl", "ssl.zig" }) catch unreachable}
             };
         },
         .opensslstatic => {
@@ -257,23 +257,23 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             lib_exe_obj.linkLibC();
             return Pkg{
                 .name = "ssl",
-                .path = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl", "ssl.zig" }) catch unreachable},
+                .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl", "ssl.zig" }) catch unreachable},
             };
         },
         .iguana => {
             const iguana_repo = GitRepoStep.create(b, .{
                 .url = "https://github.com/marler8997/iguanaTLS",
                 .branch = null,
-                .sha = "47169e207864e0cfbace3c92a31a0cf8d938d1b2",
+                .sha = "a689192106291237573fb8a348cc5ff7ccd8110c",
             });
             lib_exe_obj.step.dependOn(&iguana_repo.step);
             const iguana_repo_path = iguana_repo.getPath(&lib_exe_obj.step);
             const iguana_index_file = std.fs.path.join(b.allocator, &[_][]const u8 {iguana_repo_path, "src", "main.zig"}) catch unreachable;
             return b.dupePkg(Pkg{
                 .name = "ssl",
-                .path = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "iguana", "ssl.zig" }) catch unreachable },
+                .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "iguana", "ssl.zig" }) catch unreachable },
                 .dependencies = &[_]Pkg {
-                    .{ .name = "iguana", .path = .{ .path = iguana_index_file } },
+                    .{ .name = "iguana", .source = .{ .path = iguana_index_file } },
                 },
             });
         },
@@ -308,9 +308,9 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             //    "src" ++ std.fs.path.sep_str ++ "win32.zig");
             return b.dupePkg(.{
                 .name = "ssl",
-                .path = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "schannel", "ssl.zig" }) catch unreachable },
+                .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "schannel", "ssl.zig" }) catch unreachable },
                 //.dependencies = &[_]Pkg {
-                //    .{ .name = "win32", .path = .{ .path = zigwin32_index_file } },
+                //    .{ .name = "win32", .source = .{ .path = zigwin32_index_file } },
                 //},
             });
         }
