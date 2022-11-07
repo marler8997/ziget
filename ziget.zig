@@ -5,6 +5,6 @@ pub const url = @import("./ziget/url.zig");
 pub const request = @import("./ziget/request.zig");
 pub const http = @import("./ziget/http.zig");
 
-test "" {
+test {
     std.meta.refAllDecls(@This());
 }

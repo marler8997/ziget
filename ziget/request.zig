@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 const std = @import("std");
 const mem = std.mem;
 const net = std.net;
@@ -23,17 +24,23 @@ const DownloadResult = union(enum) {
 
 /// Options for a download
 pub const DownloadOptions = struct {
-    pub const Flag = struct {
+    //pub const Flag = struct {
         //pub const bufferIsMaxHttpRequest  : u8 = 0x01;
         //pub const bufferIsMaxHttpResponse : u8 = 0x02;
-    };
+    //};
     flags: u8,
     allocator: Allocator,
     maxRedirects: u32,
     forwardBufferSize: u32,
     maxHttpResponseHeaders: u32,
-    onHttpRequest: fn(request: []const u8) void,
-    onHttpResponse: fn(response: []const u8) void,
+    onHttpRequest: switch (builtin.zig_backend) {
+        .stage1 => fn(request: []const u8) void,
+        else => *const fn(request: []const u8) void,
+    },
+    onHttpResponse: switch (builtin.zig_backend) {
+        .stage1 => fn(response: []const u8) void,
+        else => *const fn(response: []const u8) void,
+    },
 };
 /// State that can change during a download
 pub const DownloadState = struct {

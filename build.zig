@@ -58,7 +58,7 @@ fn addExe(
     comptime optional_ssl_backend: ?SslBackend,
     build_all_step: *std.build.Step,
 ) *std.build.LibExeObjStep {
-    const info: struct { name: []const u8, exe_suffix: []const u8 } = if (optional_ssl_backend) |backend| .{
+    const info: struct { name: []const u8, exe_suffix: []const u8 } = comptime if (optional_ssl_backend) |backend| .{
         .name = @tagName(backend),
         .exe_suffix = if (backend == .iguana) "" else ("-" ++ @tagName(backend)),
     } else .{
@@ -233,10 +233,10 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             }
 
             const openssl_repo_path_for_step = openssl_repo.getPath(&lib_exe_obj.step);
-            lib_exe_obj.addIncludeDir(openssl_repo_path_for_step);
-            lib_exe_obj.addIncludeDir(std.fs.path.join(b.allocator, &[_][]const u8 {
+            lib_exe_obj.addIncludePath(openssl_repo_path_for_step);
+            lib_exe_obj.addIncludePath(std.fs.path.join(b.allocator, &[_][]const u8 {
                 openssl_repo_path_for_step, "include" }) catch unreachable);
-            lib_exe_obj.addIncludeDir(std.fs.path.join(b.allocator, &[_][]const u8 {
+            lib_exe_obj.addIncludePath(std.fs.path.join(b.allocator, &[_][]const u8 {
                 openssl_repo_path_for_step, "crypto", "modes" }) catch unreachable);
             const cflags = &[_][]const u8 {
                 "-Wall",
@@ -264,7 +264,7 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             const iguana_repo = GitRepoStep.create(b, .{
                 .url = "https://github.com/marler8997/iguanaTLS",
                 .branch = null,
-                .sha = "a689192106291237573fb8a348cc5ff7ccd8110c",
+                .sha = "94da1c1531cdd106c7e910d8559b9738cdcd6430",
             });
             lib_exe_obj.step.dependOn(&iguana_repo.step);
             const iguana_repo_path = iguana_repo.getPath(&lib_exe_obj.step);
@@ -295,8 +295,8 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
                 const msspi_main_cpp = std.fs.path.join(b.allocator, &[_][]const u8 { msspi_src_dir, "msspi.cpp" }) catch unreachable;
                 const msspi_third_party_include = std.fs.path.join(b.allocator, &[_][]const u8 { msspi_repo_path, "third_party", "cprocsp", "include" }) catch unreachable;
                 lib_exe_obj.addCSourceFile(msspi_main_cpp, &[_][]const u8 { });
-                lib_exe_obj.addIncludeDir(msspi_src_dir);
-                lib_exe_obj.addIncludeDir(msspi_third_party_include);
+                lib_exe_obj.addIncludePath(msspi_src_dir);
+                lib_exe_obj.addIncludePath(msspi_third_party_include);
                 lib_exe_obj.linkLibC();
                 lib_exe_obj.linkSystemLibrary("ws2_32");
                 lib_exe_obj.linkSystemLibrary("crypt32");
@@ -347,8 +347,8 @@ pub fn setupOpensslWindows(lib_exe_obj: *std.build.LibExeObjStep) void {
     // NOTE: right now these files are hardcoded to the files expected when installing SSL via
     //       this web page: https://slproweb.com/products/Win32OpenSSL.html and installed using
     //       this exe installer: https://slproweb.com/download/Win64OpenSSL-1_1_1g.exe
-    lib_exe_obj.addIncludeDir(std.fs.path.join(b.allocator, &[_][]const u8 {openssl_path, "include"}) catch unreachable);
-    lib_exe_obj.addLibPath(std.fs.path.join(b.allocator, &[_][]const u8 {openssl_path, "lib"}) catch unreachable);
+    lib_exe_obj.addIncludePath(std.fs.path.join(b.allocator, &[_][]const u8 {openssl_path, "include"}) catch unreachable);
+    lib_exe_obj.addLibraryPath(std.fs.path.join(b.allocator, &[_][]const u8 {openssl_path, "lib"}) catch unreachable);
     // install dlls to the same directory as executable
     for ([_][]const u8 {"libcrypto-1_1-x64.dll", "libssl-1_1-x64.dll"}) |dll| {
         lib_exe_obj.step.dependOn(

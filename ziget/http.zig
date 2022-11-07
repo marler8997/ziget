@@ -1,5 +1,5 @@
 pub const parse = @import("http/parse.zig");
 
-test "" {
+test {
     @import("std").meta.refAllDecls(@This());
 }

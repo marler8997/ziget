@@ -1,9 +1,13 @@
+const builtin = @import("builtin");
 const std = @import("std");
 const RunStep = std.build.RunStep;
 const print = std.debug.print;
 
 // This saves the RunStep.make function pointer because it is private
-var global_run_step_make: ?fn(step: *std.build.Step) anyerror!void = null;
+var global_run_step_make: switch (builtin.zig_backend) {
+    .stage1 => ?fn(step: *std.build.Step) anyerror!void,
+    else => ?*const fn(step: *std.build.Step) anyerror!void,
+} = null;
     
 pub fn enable(run_step: *RunStep) void {
     // TODO: use an atomic operation
