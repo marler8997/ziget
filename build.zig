@@ -39,6 +39,7 @@ pub fn build(b: *Builder) !void {
 
 fn getEnabledByDefault(optional_ssl_backend: ?SslBackend, is_ci: bool) bool {
     return if (optional_ssl_backend) |backend| switch (backend) {
+        .std => true,
         .iguana => true,
         .schannel => false, // schannel not supported yet
         .opensslstatic => (
@@ -133,6 +134,7 @@ fn addTest(
 }
 
 pub const SslBackend = enum {
+    std,
     openssl,
     opensslstatic,
     iguana,
@@ -162,6 +164,12 @@ pub fn addZigetPkg(
 fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, ziget_repo: []const u8) Pkg {
     const b = lib_exe_obj.builder;
     switch (backend) {
+        .std => {
+            return Pkg{
+                .name = "ssl",
+                .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "stdssl.zig" }) catch unreachable },
+            };
+        },
         .openssl => {
             lib_exe_obj.linkSystemLibrary("c");
             if (builtin.os.tag == .windows) {
