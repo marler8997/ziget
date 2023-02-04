@@ -264,7 +264,7 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
             const iguana_repo = GitRepoStep.create(b, .{
                 .url = "https://github.com/marler8997/iguanaTLS",
                 .branch = null,
-                .sha = "94da1c1531cdd106c7e910d8559b9738cdcd6430",
+                .sha = "24b465f8330edd7085450da305b1c75fd6d480e7",
             });
             lib_exe_obj.step.dependOn(&iguana_repo.step);
             const iguana_repo_path = iguana_repo.getPath(&lib_exe_obj.step);
