@@ -25,22 +25,21 @@ pub fn build(b: *Builder) !void {
         addTest(b, test_all_step, field.name, ssl_exes[i], enum_value, is_ci);
     }
 
-    // by default, install zig-iguana
-    const default_exe = ssl_exes[@enumToInt(SslBackend.iguana)];
+    // by default, install the std ssl backend
+    const default_exe = ssl_exes[@enumToInt(SslBackend.std)];
     b.getInstallStep().dependOn(&default_exe.install_step.?.step);
     const run_cmd = default_exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-    const run_step = b.step("run", "Run ziget with the iguana backend");
+    const run_step = b.step("run", "Run ziget with the std ssl backend");
     run_step.dependOn(&run_cmd.step);
 }
 
 fn getEnabledByDefault(optional_ssl_backend: ?SslBackend, is_ci: bool) bool {
     return if (optional_ssl_backend) |backend| switch (backend) {
         .std => true,
-        .iguana => true,
         .schannel => false, // schannel not supported yet
         .opensslstatic => (
                builtin.os.tag == .linux
@@ -63,7 +62,7 @@ fn addExe(
 ) *std.build.LibExeObjStep {
     const info: struct { name: []const u8, exe_suffix: []const u8 } = comptime if (optional_ssl_backend) |backend| .{
         .name = @tagName(backend),
-        .exe_suffix = if (backend == .iguana) "" else ("-" ++ @tagName(backend)),
+        .exe_suffix = if (backend == .std) "" else ("-" ++ @tagName(backend)),
     } else .{
         .name = "nossl",
         .exe_suffix = "-nossl",
@@ -137,7 +136,6 @@ pub const SslBackend = enum {
     std,
     openssl,
     opensslstatic,
-    iguana,
     schannel,
 };
 pub const ssl_backends = @typeInfo(SslBackend).Enum.fields;
@@ -270,23 +268,6 @@ fn addSslBackend(lib_exe_obj: *std.build.LibExeObjStep, backend: SslBackend, zig
                 .name = "ssl",
                 .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl", "ssl.zig" }) catch unreachable},
             };
-        },
-        .iguana => {
-            const iguana_repo = GitRepoStep.create(b, .{
-                .url = "https://github.com/marler8997/iguanaTLS",
-                .branch = null,
-                .sha = "24b465f8330edd7085450da305b1c75fd6d480e7",
-            });
-            lib_exe_obj.step.dependOn(&iguana_repo.step);
-            const iguana_repo_path = iguana_repo.getPath(&lib_exe_obj.step);
-            const iguana_index_file = std.fs.path.join(b.allocator, &[_][]const u8 {iguana_repo_path, "src", "main.zig"}) catch unreachable;
-            return b.dupePkg(Pkg{
-                .name = "ssl",
-                .source = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "iguana", "ssl.zig" }) catch unreachable },
-                .dependencies = &[_]Pkg {
-                    .{ .name = "iguana", .source = .{ .path = iguana_index_file } },
-                },
-            });
         },
         .schannel => {
             {
