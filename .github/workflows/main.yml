@@ -15,8 +15,8 @@ jobs:
         with:
           version: 0.11.0-dev.1507+6f13a725a
       - run: |
-          zig build test -Dfetch
-          zig build all
+          zig build test -Dfetch -Dis_ci
+          zig build all -Dis_ci
         shell: bash
       - uses: actions/upload-artifact@v2
         with:

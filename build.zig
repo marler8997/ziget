@@ -9,19 +9,20 @@ pub fn build(b: *Builder) !void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
+    const is_ci = if (b.option(bool, "is_ci", "is the CI")) |o| o else false;
     const build_all_step = b.step("all", "Build ziget with all the 'enabled' backends");
-    const nossl_exe = addExe(b, target, mode, null, build_all_step);
+    const nossl_exe = addExe(b, target, mode, null, build_all_step, is_ci);
     var ssl_exes: [ssl_backends.len]*std.build.LibExeObjStep = undefined;
     inline for (ssl_backends) |field, i| {
         const enum_value = @field(SslBackend, field.name);
-        ssl_exes[i] = addExe(b, target, mode, enum_value, build_all_step);
+        ssl_exes[i] = addExe(b, target, mode, enum_value, build_all_step, is_ci);
     }
 
     const test_all_step = b.step("test", "Run all the 'Enabled' tests");
-    addTest(b, test_all_step, "nossl", nossl_exe, null);
+    addTest(b, test_all_step, "nossl", nossl_exe, null, is_ci);
     inline for (ssl_backends) |field, i| {
         const enum_value = @field(SslBackend, field.name);
-        addTest(b, test_all_step, field.name, ssl_exes[i], enum_value);
+        addTest(b, test_all_step, field.name, ssl_exes[i], enum_value, is_ci);
     }
 
     // by default, install zig-iguana
@@ -36,7 +37,7 @@ pub fn build(b: *Builder) !void {
     run_step.dependOn(&run_cmd.step);
 }
 
-fn getEnabledByDefault(optional_ssl_backend: ?SslBackend) bool {
+fn getEnabledByDefault(optional_ssl_backend: ?SslBackend, is_ci: bool) bool {
     return if (optional_ssl_backend) |backend| switch (backend) {
         .iguana => true,
         .schannel => false, // schannel not supported yet
@@ -45,7 +46,7 @@ fn getEnabledByDefault(optional_ssl_backend: ?SslBackend) bool {
             // or builtin.os.tag == .macos (not working yet, I think config is not working)
         ),
         .openssl => (
-               builtin.os.tag == .linux
+            (builtin.os.tag == .linux and !is_ci) // zig is having trouble with the openssh headers on the CI
             // or builtin.os.tag == .macos (not working yet, not sure why)
         ),
     } else true;
@@ -57,6 +58,7 @@ fn addExe(
     mode: std.builtin.Mode,
     comptime optional_ssl_backend: ?SslBackend,
     build_all_step: *std.build.Step,
+    is_ci: bool,
 ) *std.build.LibExeObjStep {
     const info: struct { name: []const u8, exe_suffix: []const u8 } = comptime if (optional_ssl_backend) |backend| .{
         .name = @tagName(backend),
@@ -72,7 +74,7 @@ fn addExe(
     exe.setBuildMode(mode);
     addZigetPkg(exe, optional_ssl_backend, ".");
     const install = b.addInstallArtifact(exe);
-    const enabled_by_default = getEnabledByDefault(optional_ssl_backend);
+    const enabled_by_default = getEnabledByDefault(optional_ssl_backend, is_ci);
     if (enabled_by_default) {
         build_all_step.dependOn(&install.step);
     }
@@ -92,8 +94,9 @@ fn addTest(
     comptime backend_name: []const u8,
     exe: *std.build.LibExeObjStep,
     optional_ssl_backend: ?SslBackend,
+    is_ci: bool,
 ) void {
-    const enabled_by_default = getEnabledByDefault(optional_ssl_backend);
+    const enabled_by_default = getEnabledByDefault(optional_ssl_backend, is_ci);
     const abled_suffix: []const u8 = if (enabled_by_default) "" else " (DISABLED BY DEFAULT)";
     const test_backend_step = b.step(
         "test-" ++ backend_name,
@@ -124,7 +127,7 @@ fn addTest(
         loggyrunstep.enable(run);
         test_backend_step.dependOn(&run.step);
     }
-    if (getEnabledByDefault(optional_ssl_backend)) {
+    if (getEnabledByDefault(optional_ssl_backend, is_ci)) {
         test_all_step.dependOn(test_backend_step);
     }
 }
