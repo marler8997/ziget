@@ -31,9 +31,13 @@ pub const SslConn = struct {
     }
 
     pub fn read(self: *SslConn, data: []u8) !usize {
-        return self.client.read(self.stream, data);
+        const len = try self.client.read(self.stream, data);
+        //std.log.info("stdssl: read {} bytes", .{len});
+        return len;
     }
     pub fn write(self: *SslConn, data: []const u8) !usize {
-        return self.client.write(self.stream, data);
+        const written = try self.client.write(self.stream, data);
+        //std.log.info("stdssl: write {} bytes, wrote {}", .{data.len, written});
+        return written;
     }
 };

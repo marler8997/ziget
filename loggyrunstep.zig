@@ -30,7 +30,7 @@ fn printCmd(cwd: ?[]const u8, argv: []const []const u8) void {
 fn loggyRunStepMake(step: *std.build.Step) !void {
     const self = @fieldParentPtr(RunStep, "step", step);
 
-    const cwd = if (self.cwd) |cwd| self.builder.pathFromRoot(cwd) else self.builder.build_root;
+    const cwd = if (self.cwd) |cwd| self.builder.pathFromRoot(cwd) else self.builder.build_root.path.?;
 
     var argv_list = std.ArrayList([]const u8).init(self.builder.allocator);
     for (self.argv.items) |arg| {
@@ -40,6 +40,9 @@ fn loggyRunStepMake(step: *std.build.Step) !void {
             .artifact => |artifact| {
                 const executable_path = artifact.installed_path orelse artifact.getOutputSource().getPath(self.builder);
                 try argv_list.append(executable_path);
+            },
+            .output => |output| {
+                std.debug.panic("todo: convert output '{}' to argv string", .{output});
             },
         }
     }

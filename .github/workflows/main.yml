@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: 0.11.0-dev.1507+6f13a725a
+          version: 0.11.0-dev.1862+e7f128c20
       - run: |
           zig build test -Dfetch -Dis_ci
           zig build all -Dis_ci

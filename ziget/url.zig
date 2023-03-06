@@ -81,7 +81,7 @@ pub fn parseUrl(url: []const u8) !Url {
 
 pub fn eqlPtr(comptime T: type, a: [*]const T, b: [*]const T, len: usize) bool {
     if (a == b) return true;
-    for (a[0..len]) |item, index| {
+    for (a[0..len], 0..) |item, index| {
         if (b[index] != item) return false;
     }
     return true;
