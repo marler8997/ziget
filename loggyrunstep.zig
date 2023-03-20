@@ -5,8 +5,8 @@ const print = std.debug.print;
 
 // This saves the RunStep.make function pointer because it is private
 var global_run_step_make: switch (builtin.zig_backend) {
-    .stage1 => ?fn(step: *std.build.Step) anyerror!void,
-    else => ?*const fn(step: *std.build.Step) anyerror!void,
+    .stage1 => ?fn(step: *std.build.Step, prog_node: *std.Progress.Node) anyerror!void,
+    else => ?*const fn(step: *std.build.Step, prog_node: *std.Progress.Node) anyerror!void,
 } = null;
     
 pub fn enable(run_step: *RunStep) void {
@@ -27,18 +27,19 @@ fn printCmd(cwd: ?[]const u8, argv: []const []const u8) void {
     print("\n", .{});
 }
 
-fn loggyRunStepMake(step: *std.build.Step) !void {
+fn loggyRunStepMake(step: *std.build.Step, prog_node: *std.Progress.Node) !void {
     const self = @fieldParentPtr(RunStep, "step", step);
 
-    const cwd = if (self.cwd) |cwd| self.builder.pathFromRoot(cwd) else self.builder.build_root.path.?;
+    const cwd = if (self.cwd) |cwd| self.step.owner.pathFromRoot(cwd) else self.step.owner.build_root.path.?;
 
-    var argv_list = std.ArrayList([]const u8).init(self.builder.allocator);
+    var argv_list = std.ArrayList([]const u8).init(self.step.owner.allocator);
     for (self.argv.items) |arg| {
         switch (arg) {
             .bytes => |bytes| try argv_list.append(bytes),
-            .file_source => |file| try argv_list.append(file.getPath(self.builder)),
+            .file_source => |file| try argv_list.append(file.getPath(self.step.owner)),
+            .directory_source => @panic("todo"),
             .artifact => |artifact| {
-                const executable_path = artifact.installed_path orelse artifact.getOutputSource().getPath(self.builder);
+                const executable_path = artifact.installed_path orelse artifact.getOutputSource().getPath(self.step.owner);
                 try argv_list.append(executable_path);
             },
             .output => |output| {
@@ -47,5 +48,5 @@ fn loggyRunStepMake(step: *std.build.Step) !void {
         }
     }
     printCmd(cwd, argv_list.items);
-    return global_run_step_make.?(step);
+    return global_run_step_make.?(step, prog_node);
 }

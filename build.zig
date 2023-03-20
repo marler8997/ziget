@@ -151,7 +151,7 @@ pub fn addZigetModule(
     optional_ssl_backend: ?SslBackend,
     ziget_repo: []const u8,
 ) void {
-    const b = compile.builder;
+    const b = compile.step.owner;
     const ziget_index = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "ziget.zig" }) catch unreachable;
     const ssl_module = if (optional_ssl_backend) |backend| addSslBackend(compile, backend, ziget_repo)
         else b.createModule(.{ .source_file = .{ .path = "nossl/ssl.zig" } });
@@ -164,7 +164,7 @@ pub fn addZigetModule(
 }
 
 fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_repo: []const u8) *Module {
-    const b = compile.builder;
+    const b = compile.step.owner;
     switch (backend) {
         .std => return b.createModule(.{
             .source_file = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "stdssl.zig" }) catch unreachable },
@@ -226,9 +226,9 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                     "no-sm3",
                     "no-sm4",
                 });
-                configure_openssl.stdout_action = .{
-                    .expect_matches = &[_][]const u8 { "OpenSSL has been successfully configured" },
-                };
+                configure_openssl.addCheck(.{
+                    .expect_stdout_match = "OpenSSL has been successfully configured",
+                });
                 const make_openssl = std.build.RunStep.create(b, "configure openssl");
                 make_openssl.cwd = configure_openssl.cwd;
                 make_openssl.addArgs(&[_][]const u8 {
@@ -327,7 +327,7 @@ const OpensslPathOption = struct {
 var global_openssl_path_option = OpensslPathOption { };
 
 pub fn setupOpensslWindows(compile: *std.build.CompileStep) void {
-    const b = compile.builder;
+    const b = compile.step.owner;
 
     const openssl_path = global_openssl_path_option.get(b) orelse {
         compile.step.dependOn(&FailStep.create(b, "missing openssl-path",
@@ -357,12 +357,18 @@ const FailStep = struct {
     pub fn create(b: *Builder, name: []const u8, fail_msg: []const u8) *FailStep {
         var result = b.allocator.create(FailStep) catch unreachable;
         result.* = .{
-            .step = std.build.Step.init(.custom, name, b.allocator, make),
+            .step = std.build.Step.init(.{
+                .id = .custom,
+                .name = name,
+                .owner = b,
+                .makeFn = make,
+            }),
             .fail_msg = fail_msg,
         };
         return result;
     }
-    fn make(step: *std.build.Step) !void {
+    fn make(step: *std.build.Step, prog_node: *std.Progress.Node) !void {
+        _ = prog_node;
         const self = @fieldParentPtr(FailStep, "step", step);
         std.log.err("{s}", .{self.fail_msg});
         std.os.exit(0xff);
