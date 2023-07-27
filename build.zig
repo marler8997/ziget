@@ -26,20 +26,21 @@ pub fn build(b: *Builder) !void {
     }
 
     // by default, install the std ssl backend
-    const default_exe = ssl_exes[@intFromEnum(SslBackend.std)];
+    const default_exe = ssl_exes[@intFromEnum(SslBackend.iguana)];
     b.installArtifact(default_exe);
     const run_cmd = b.addRunArtifact(default_exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-    const run_step = b.step("run", "Run ziget with the std ssl backend");
+    const run_step = b.step("run", "Run ziget with the iguana backend");
     run_step.dependOn(&run_cmd.step);
 }
 
 fn getEnabledByDefault(optional_ssl_backend: ?SslBackend, is_ci: bool) bool {
     return if (optional_ssl_backend) |backend| switch (backend) {
         .std => true,
+        .iguana => true,
         .schannel => false, // schannel not supported yet
         .opensslstatic => (
                builtin.os.tag == .linux
@@ -62,7 +63,7 @@ fn addExe(
 ) *std.build.CompileStep {
     const info: struct { name: []const u8, exe_suffix: []const u8 } = comptime if (optional_ssl_backend) |backend| .{
         .name = @tagName(backend),
-        .exe_suffix = if (backend == .std) "" else ("-" ++ @tagName(backend)),
+        .exe_suffix = if (backend == .iguana) "" else ("-" ++ @tagName(backend)),
     } else .{
         .name = "nossl",
         .exe_suffix = "-nossl",
@@ -139,6 +140,7 @@ pub const SslBackend = enum {
     std,
     openssl,
     opensslstatic,
+    iguana,
     schannel,
 };
 pub const ssl_backends = @typeInfo(SslBackend).Enum.fields;
@@ -266,6 +268,25 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
             compile.linkLibC();
             return b.createModule(.{
                 .source_file = .{ .path = std.fs.path.join(b.allocator, &[_][]const u8 { ziget_repo, "openssl", "ssl.zig" }) catch unreachable},
+            });
+        },
+        .iguana => {
+            const iguana_repo = GitRepoStep.create(b, .{
+                .url = "https://github.com/marler8997/iguanaTLS",
+                .branch = null,
+                .sha = "91d22df192d1df1022352df49f41c1a90ca8327d",
+                .fetch_enabled = true,
+            });
+            compile.step.dependOn(&iguana_repo.step);
+            const iguana_repo_path = iguana_repo.getPath(&compile.step);
+            const iguana_mod = b.addModule("iguanaTLS", .{
+                .source_file = .{ .path = b.pathJoin(&.{iguana_repo_path, "src", "main.zig"}), },
+            });
+            return b.createModule(.{
+                .source_file = .{ .path = b.pathJoin(&.{ ziget_repo, "iguana", "ssl.zig" }), },
+                .dependencies = &[_]std.Build.ModuleDependency{
+                    .{ .name = "iguana", .module = iguana_mod },
+                },
             });
         },
         .schannel => {
