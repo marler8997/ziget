@@ -89,10 +89,10 @@ pub fn eqlPtr(comptime T: type, a: [*]const T, b: [*]const T, len: usize) bool {
 
 
 fn matchSkip(ptrRef: *[*]const u8, limit: [*]const u8, needle: []const u8) bool {
-    if ( (@ptrToInt(limit) - @ptrToInt(ptrRef.*) >= needle.len) and
+    if ( (@intFromPtr(limit) - @intFromPtr(ptrRef.*) >= needle.len) and
         eqlPtr(u8, ptrRef.*, needle.ptr, needle.len)
     ) {
-        ptrRef.* = @intToPtr([*]const u8, @ptrToInt(ptrRef.*) + needle.len);
+        ptrRef.* = @ptrFromInt(@intFromPtr(ptrRef.*) + needle.len);
         return true;
     }
     return false;
@@ -143,9 +143,9 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
                 port32 += ptr[0] - '0';
                 if (port32 >= 65535) return error.UrlPortTooHigh;
             }
-            optionalPort = @intCast(u16, port32);
+            optionalPort = @intCast(port32);
         }
-        var pathOffset = @intCast(u16, @ptrToInt(ptr) - @ptrToInt(start));
+        var pathOffset: u16 = @intCast(@intFromPtr(ptr) - @intFromPtr(start));
         var pathLimit : u16 = undefined;
         if (ptr == limit) {
             pathLimit  = pathOffset;
@@ -153,13 +153,13 @@ pub fn parseUrlLimit(start: [*]const u8, limit: [*]const u8) !Url {
             std.debug.assert(ptr[0] == '/');
             ptr += 1;
             // TODO: this won't be correct if there is a query
-            pathLimit  = @intCast(u16, @ptrToInt(limit) - @ptrToInt(start));
+            pathLimit = @intCast(@intFromPtr(limit) - @intFromPtr(start));
         }
         return Url { .Http = .{
-            .str = start[0..@ptrToInt(limit) - @ptrToInt(start)],
+            .str = start[0..@intFromPtr(limit) - @intFromPtr(start)],
             .secure = isHttps,
-            .hostOffset  = @intCast(u8 , @ptrToInt(hostStart) - @ptrToInt(start)),
-            .hostLimit   = @intCast(u16, @ptrToInt(hostLimit) - @ptrToInt(start)),
+            .hostOffset  = @intCast(@intFromPtr(hostStart) - @intFromPtr(start)),
+            .hostLimit   = @intCast(@intFromPtr(hostLimit) - @intFromPtr(start)),
             .optionalPort = optionalPort,
             .pathOffset  = pathOffset,
             .pathLimit   = pathLimit,

@@ -148,7 +148,7 @@ pub const SslConn = struct {
     }
     pub fn write(self: *SslConn, data: []const u8) !usize {
         // TODO: and writeSize with c_int mask, it's ok if we don't write all the data
-        const result = openssl.SSL_write(self.ssl, data.ptr, @intCast(c_int, data.len));
+        const result = openssl.SSL_write(self.ssl, data.ptr, @intCast(data.len));
         if (result <= 0) {
             const err = openssl.SSL_get_error(self.ssl, result);
             switch (err) {
@@ -169,7 +169,7 @@ pub const SslConn = struct {
                     => std.debug.panic("SSL_write failed with {d}\n", .{err}),
             }
         }
-        return @intCast(usize, result);
+        return @intCast(result);
     }
 };
 
@@ -177,6 +177,6 @@ fn streamToCHandle(file: std.net.Stream)
     if (builtin.os.tag == .windows) c_int else std.os.socket_t {
 
     if (builtin.os.tag == .windows)
-        return @intCast(c_int, @ptrToInt(file.handle));
+        return @intCast(@intFromPtr(file.handle));
     return file.handle;
 }

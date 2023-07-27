@@ -152,7 +152,7 @@ pub fn readHttpResponse(allocator: Allocator, reader: anytype, initialBufferLen:
             if (buffer.len >= maxBufferLen)
                 return error.HttpResponseTooBig;
             // TODO: is this right with the errdefer free?
-            buffer = try allocator.realloc(buffer, std.math.min(maxBufferLen, 2 * buffer.len));
+            buffer = try allocator.realloc(buffer, @min(maxBufferLen, 2 * buffer.len));
         }
         var len = try reader.read(buffer[totalRead..]);
         if (len == 0) return error.HttpResponseIncomplete;
@@ -205,7 +205,7 @@ pub fn downloadHttpOrRedirect(httpUrl: Url.Http, writer: anytype, options: Downl
 
     {
         const response = try readHttpResponse(options.allocator, stream.reader(),
-            std.math.min(4096, options.maxHttpResponseHeaders), options.maxHttpResponseHeaders);
+            @min(4096, options.maxHttpResponseHeaders), options.maxHttpResponseHeaders);
         defer options.allocator.free(response.buffer);
         const httpResponse = response.getHttpSlice();
         options.onHttpResponse(httpResponse);

@@ -272,7 +272,7 @@ fn MsgReader(comptime Reader: type) type { return struct {
             try self.readLen();
         }
 
-        const len = @intCast(u32, try self.reader.read(data[0 .. std.math.min(self.msg_left, data.len)]));
+        const len = @intCast(u32, try self.reader.read(data[0 .. @min(self.msg_left, data.len)]));
         self.msg_left -= len;
         return len;
     }

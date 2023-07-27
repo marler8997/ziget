@@ -26,9 +26,9 @@ pub fn build(b: *Builder) !void {
     }
 
     // by default, install the std ssl backend
-    const default_exe = ssl_exes[@enumToInt(SslBackend.std)];
-    b.getInstallStep().dependOn(&default_exe.install_step.?.step);
-    const run_cmd = default_exe.run();
+    const default_exe = ssl_exes[@intFromEnum(SslBackend.std)];
+    b.installArtifact(default_exe);
+    const run_cmd = b.addRunArtifact(default_exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
@@ -106,26 +106,26 @@ fn addTest(
         b.fmt("Test the {s} backend{s}", .{backend_name, abled_suffix})
     );
     {
-        const run = exe.run();
+        const run = b.addRunArtifact(exe);
         run.addArg("http://google.com");
         loggyrunstep.enable(run);
         test_backend_step.dependOn(&run.step);
     }
     if (optional_ssl_backend) |_| {
         {
-            const run = exe.run();
+            const run = b.addRunArtifact(exe);
             run.addArg("http://ziglang.org"); // NOTE: ziglang.org will redirect to HTTPS
             loggyrunstep.enable(run);
             test_backend_step.dependOn(&run.step);
         }
         {
-            const run = exe.run();
+            const run = b.addRunArtifact(exe);
             run.addArg("https://ziglang.org");
             loggyrunstep.enable(run);
             test_backend_step.dependOn(&run.step);
         }
     } else {
-        const run = exe.run();
+        const run = b.addRunArtifact(exe);
         run.addArg("google.com");
         loggyrunstep.enable(run);
         test_backend_step.dependOn(&run.step);

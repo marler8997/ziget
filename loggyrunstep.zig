@@ -36,7 +36,10 @@ fn loggyRunStepMake(step: *std.build.Step, prog_node: *std.Progress.Node) !void 
     for (self.argv.items) |arg| {
         switch (arg) {
             .bytes => |bytes| try argv_list.append(bytes),
-            .file_source => |file| try argv_list.append(file.getPath(self.step.owner)),
+            .file_source => |file| {
+                if (file.prefix.len != 0) @panic("todo");
+                try argv_list.append(file.file_source.getPath(self.step.owner));
+            },
             .directory_source => @panic("todo"),
             .artifact => |artifact| {
                 const executable_path = artifact.installed_path orelse artifact.getOutputSource().getPath(self.step.owner);
