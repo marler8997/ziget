@@ -42,14 +42,10 @@ fn getEnabledByDefault(optional_ssl_backend: ?SslBackend, is_ci: bool) bool {
         .std => true,
         .iguana => true,
         .schannel => false, // schannel not supported yet
-        .opensslstatic => (
-               builtin.os.tag == .linux
-            // or builtin.os.tag == .macos (not working yet, I think config is not working)
-        ),
-        .openssl => (
-            (builtin.os.tag == .linux and !is_ci) // zig is having trouble with the openssh headers on the CI
-            // or builtin.os.tag == .macos (not working yet, not sure why)
-        ),
+        // TODO: also enable for macos
+        .opensslstatic => (builtin.os.tag == .linux),
+        // TODO: also enable for macos
+        .openssl => (builtin.os.tag == .linux and !is_ci), // zig is having trouble with the openssh headers on the CI
     } else true;
 }
 
@@ -86,9 +82,7 @@ fn addExe(
     b.step(info.name, b.fmt("Build ziget with the {s} backend{s}", .{
         info.name,
         abled_suffix,
-    })).dependOn(
-        &install.step
-    );
+    })).dependOn(&install.step);
     return exe;
 }
 
@@ -104,7 +98,7 @@ fn addTest(
     const abled_suffix: []const u8 = if (enabled_by_default) "" else " (DISABLED BY DEFAULT)";
     const test_backend_step = b.step(
         "test-" ++ backend_name,
-        b.fmt("Test the {s} backend{s}", .{backend_name, abled_suffix})
+        b.fmt("Test the {s} backend{s}", .{ backend_name, abled_suffix }),
     );
     {
         const run = b.addRunArtifact(exe);
@@ -155,11 +149,13 @@ pub fn addZigetModule(
 ) void {
     const b = compile.step.owner;
     const ziget_index = b.pathJoin(&.{ ziget_repo, "ziget.zig" });
-    const ssl_module = if (optional_ssl_backend) |backend| addSslBackend(compile, backend, ziget_repo)
-        else b.createModule(.{ .source_file = .{ .path = "nossl/ssl.zig" } });
+    const ssl_module = if (optional_ssl_backend) |backend|
+        addSslBackend(compile, backend, ziget_repo)
+    else
+        b.createModule(.{ .source_file = .{ .path = "nossl/ssl.zig" } });
     compile.addAnonymousModule("ziget", .{
         .source_file = .{ .path = ziget_index },
-        .dependencies = &[_]std.Build.ModuleDependency {
+        .dependencies = &[_]std.Build.ModuleDependency{
             .{ .name = "ssl", .module = ssl_module },
         },
     });
@@ -181,9 +177,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                 compile.linkSystemLibrary("crypto");
                 compile.linkSystemLibrary("ssl");
             }
-            return b.createModule(.{
-                .source_file = .{ .path = b.pathJoin(&.{ ziget_repo, "openssl", "ssl.zig" }) }
-            });
+            return b.createModule(.{ .source_file = .{ .path = b.pathJoin(&.{ ziget_repo, "openssl", "ssl.zig" }) } });
         },
         .opensslstatic => {
             const openssl_repo = GitRepoStep.create(b, .{
@@ -198,7 +192,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                 const configure_openssl = std.build.RunStep.create(b, "configure openssl");
                 configure_openssl.step.dependOn(&openssl_repo.step);
                 configure_openssl.cwd = openssl_repo.getPath(&configure_openssl.step);
-                configure_openssl.addArgs(&[_][]const u8 {
+                configure_openssl.addArgs(&[_][]const u8{
                     "./config",
                     // just a temporary path for now
                     //"--openssl",
@@ -233,7 +227,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                 });
                 const make_openssl = std.build.RunStep.create(b, "configure openssl");
                 make_openssl.cwd = configure_openssl.cwd;
-                make_openssl.addArgs(&[_][]const u8 {
+                make_openssl.addArgs(&[_][]const u8{
                     "make",
                     "include/openssl/opensslconf.h",
                     "include/crypto/bn_conf.h",
@@ -245,11 +239,9 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
 
             const openssl_repo_path_for_step = openssl_repo.getPath(&compile.step);
             compile.addIncludePath(.{ .path = openssl_repo_path_for_step });
-            compile.addIncludePath(.{ .path = b.pathJoin(&.{
-                openssl_repo_path_for_step, "include" })});
-            compile.addIncludePath(.{ .path = b.pathJoin(&.{
-                openssl_repo_path_for_step, "crypto", "modes" }) });
-            const cflags = &[_][]const u8 {
+            compile.addIncludePath(.{ .path = b.pathJoin(&.{ openssl_repo_path_for_step, "include" }) });
+            compile.addIncludePath(.{ .path = b.pathJoin(&.{ openssl_repo_path_for_step, "crypto", "modes" }) });
+            const cflags = &[_][]const u8{
                 "-Wall",
                 // TODO: is this the right way to do this? is it a config option?
                 "-DOPENSSL_NO_ENGINE",
@@ -282,10 +274,14 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
             compile.step.dependOn(&iguana_repo.step);
             const iguana_repo_path = iguana_repo.getPath(&compile.step);
             const iguana_mod = b.addModule("iguanaTLS", .{
-                .source_file = .{ .path = b.pathJoin(&.{iguana_repo_path, "src", "main.zig"}), },
+                .source_file = .{
+                    .path = b.pathJoin(&.{ iguana_repo_path, "src", "main.zig" }),
+                },
             });
             return b.createModule(.{
-                .source_file = .{ .path = b.pathJoin(&.{ ziget_repo, "iguana", "ssl.zig" }), },
+                .source_file = .{
+                    .path = b.pathJoin(&.{ ziget_repo, "iguana", "ssl.zig" }),
+                },
                 .dependencies = &[_]std.Build.ModuleDependency{
                     .{ .name = "iguana", .module = iguana_mod },
                 },
@@ -300,7 +296,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                 const msspi_repo = GitRepoStep.create(b, .{
                     .url = "https://github.com/deemru/msspi",
                     .branch = "0.1.42",
-                    .sha = "7338760a4a2c6fb80c47b24a2abba32d5fc40635"
+                    .sha = "7338760a4a2c6fb80c47b24a2abba32d5fc40635",
                 });
                 compile.step.dependOn(&msspi_repo.step);
                 const msspi_repo_path = msspi_repo.getPath(&compile.step);
@@ -310,7 +306,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                 const msspi_third_party_include = b.pathJoin(&.{ msspi_repo_path, "third_party", "cprocsp", "include" });
                 compile.addCSourceFile(.{
                     .file = .{ .path = msspi_main_cpp },
-                    .flags = &[_][]const u8 { },
+                    .flags = &[_][]const u8{},
                 });
                 compile.addIncludePath(.{ .path = msspi_src_dir });
                 compile.addIncludePath(.{ .path = msspi_third_party_include });
@@ -329,7 +325,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
                 //    .{ .name = "win32", .source = .{ .path = zigwin32_index_file } },
                 //},
             });
-        }
+        },
     }
 }
 
@@ -350,30 +346,27 @@ const OpensslPathOption = struct {
         return self.cached;
     }
 };
-var global_openssl_path_option = OpensslPathOption { };
+var global_openssl_path_option = OpensslPathOption{};
 
 pub fn setupOpensslWindows(compile: *std.build.CompileStep) void {
     const b = compile.step.owner;
 
     const openssl_path = global_openssl_path_option.get(b) orelse {
-        compile.step.dependOn(&FailStep.create(b, "missing openssl-path",
-            "-Dopenssl on windows requires -Dopenssl-path=DIR to be specified").step);
+        compile.step.dependOn(&FailStep.create(b, "missing openssl-path", "-Dopenssl on windows requires -Dopenssl-path=DIR to be specified").step);
         return;
     };
     // NOTE: right now these files are hardcoded to the files expected when installing SSL via
     //       this web page: https://slproweb.com/products/Win32OpenSSL.html and installed using
     //       this exe installer: https://slproweb.com/download/Win64OpenSSL-1_1_1g.exe
-    compile.addIncludePath(.{ .path = b.pathJoin(&.{openssl_path, "include"}) });
-    compile.addLibraryPath(.{ .path = b.pathJoin(&.{openssl_path, "lib"}) });
+    compile.addIncludePath(.{ .path = b.pathJoin(&.{ openssl_path, "include" }) });
+    compile.addLibraryPath(.{ .path = b.pathJoin(&.{ openssl_path, "lib" }) });
     // install dlls to the same directory as executable
-    for ([_][]const u8 {"libcrypto-1_1-x64.dll", "libssl-1_1-x64.dll"}) |dll| {
-        compile.step.dependOn(
-            &b.addInstallFileWithDir(
-                .{ .path = b.pathJoin(&.{openssl_path, dll}) },
-                .bin,
-                dll,
-            ).step
-        );
+    for ([_][]const u8{ "libcrypto-1_1-x64.dll", "libssl-1_1-x64.dll" }) |dll| {
+        compile.step.dependOn(&b.addInstallFileWithDir(
+            .{ .path = b.pathJoin(&.{ openssl_path, dll }) },
+            .bin,
+            dll,
+        ).step);
     }
 }
 
