@@ -5,10 +5,10 @@ const print = std.debug.print;
 
 // This saves the RunStep.make function pointer because it is private
 var global_run_step_make: switch (builtin.zig_backend) {
-    .stage1 => ?fn(step: *std.build.Step, prog_node: *std.Progress.Node) anyerror!void,
-    else => ?*const fn(step: *std.build.Step, prog_node: *std.Progress.Node) anyerror!void,
+    .stage1 => ?fn (step: *std.build.Step, prog_node: *std.Progress.Node) anyerror!void,
+    else => ?*const fn (step: *std.build.Step, prog_node: *std.Progress.Node) anyerror!void,
 } = null;
-    
+
 pub fn enable(run_step: *RunStep) void {
     // TODO: use an atomic operation
     if (global_run_step_make) |make| {
@@ -30,7 +30,7 @@ fn printCmd(cwd: ?[]const u8, argv: []const []const u8) void {
 fn loggyRunStepMake(step: *std.build.Step, prog_node: *std.Progress.Node) !void {
     const self = @fieldParentPtr(RunStep, "step", step);
 
-    const cwd = if (self.cwd) |cwd| self.step.owner.pathFromRoot(cwd) else self.step.owner.build_root.path.?;
+    const cwd = if (self.cwd) |cwd| self.step.owner.pathFromRoot(cwd.path) else self.step.owner.build_root.path.?;
 
     var argv_list = std.ArrayList([]const u8).init(self.step.owner.allocator);
     for (self.argv.items) |arg| {

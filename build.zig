@@ -191,7 +191,7 @@ fn addSslBackend(compile: *std.build.CompileStep, backend: SslBackend, ziget_rep
             {
                 const configure_openssl = std.build.RunStep.create(b, "configure openssl");
                 configure_openssl.step.dependOn(&openssl_repo.step);
-                configure_openssl.cwd = openssl_repo.getPath(&configure_openssl.step);
+                configure_openssl.cwd = .{ .path = openssl_repo.getPath(&configure_openssl.step) };
                 configure_openssl.addArgs(&[_][]const u8{
                     "./config",
                     // just a temporary path for now
